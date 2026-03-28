@@ -1,0 +1,54 @@
+[
+  {
+    "id": "prov_1",
+    "name": "ClearSkin Dermatology",
+    "care_setting": "dermatology",
+    "specialty": "Dermatology",
+    "address": "123 Main St",
+    "city": "New York",
+    "state": "NY",
+    "zip_code": "10001",
+    "latitude": 40.7506,
+    "longitude": -73.9972,
+    "networks": ["acme_hmo_network", "acme_ppo_network"]
+  },
+  {
+    "id": "prov_2",
+    "name": "Metro TeleDerm",
+    "care_setting": "telederm",
+    "specialty": "Teledermatology",
+    "address": "Virtual",
+    "city": "New York",
+    "state": "NY",
+    "zip_code": "10001",
+    "latitude": 40.7506,
+    "longitude": -73.9972,
+    "networks": ["acme_hmo_network", "acme_ppo_network"]
+  },
+  {
+    "id": "prov_3",
+    "name": "Downtown Primary Care",
+    "care_setting": "pcp",
+    "specialty": "Primary Care",
+    "address": "456 7th Ave",
+    "city": "New York",
+    "state": "NY",
+    "zip_code": "10018",
+    "latitude": 40.7549,
+    "longitude": -73.9928,
+    "networks": ["acme_ppo_network"]
+  },
+  {
+    "id": "prov_4",
+    "name": "Skin Studio Cosmetic Dermatology",
+    "care_setting": "cosmetic_derm",
+    "specialty": "Cosmetic Dermatology",
+    "address": "789 Park Ave",
+    "city": "New York",
+    "state": "NY",
+    "zip_code": "10021",
+    "latitude": 40.7715,
+    "longitude": -73.9642,
+    "networks": ["acme_ppo_network"]
+  }
+]

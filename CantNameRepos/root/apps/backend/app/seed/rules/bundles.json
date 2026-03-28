@@ -1,0 +1,59 @@
+[
+  {
+    "id": "bundle_telederm_acne_consult",
+    "name": "Teledermatology acne consult",
+    "care_setting": "telederm",
+    "description": "Virtual dermatology visit for non-urgent acne evaluation.",
+    "scenario_costs": {
+      "deductible_met": 35,
+      "deductible_partial": 65,
+      "deductible_not_met": 110
+    },
+    "notes": [
+      "Does not include medication costs.",
+      "Does not include cosmetic procedures."
+    ]
+  },
+  {
+    "id": "bundle_pcp_acne_visit",
+    "name": "Primary care acne visit",
+    "care_setting": "pcp",
+    "description": "Standard office visit for acne evaluation.",
+    "scenario_costs": {
+      "deductible_met": 25,
+      "deductible_partial": 55,
+      "deductible_not_met": 95
+    },
+    "notes": [
+      "Does not include medication costs."
+    ]
+  },
+  {
+    "id": "bundle_derm_new_patient",
+    "name": "In-person dermatology consult",
+    "care_setting": "dermatology",
+    "description": "Specialty dermatology office visit for acne evaluation.",
+    "scenario_costs": {
+      "deductible_met": 60,
+      "deductible_partial": 110,
+      "deductible_not_met": 180
+    },
+    "notes": [
+      "Does not include procedures or medication costs."
+    ]
+  },
+  {
+    "id": "bundle_cosmetic_consult",
+    "name": "Cosmetic dermatology consult",
+    "care_setting": "cosmetic_derm",
+    "description": "Cosmetic consultation for acne scarring or elective treatment goals.",
+    "scenario_costs": {
+      "deductible_met": 100,
+      "deductible_partial": 150,
+      "deductible_not_met": 220
+    },
+    "notes": [
+      "Cosmetic services may not be covered by insurance."
+    ]
+  }
+]
