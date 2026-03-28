@@ -1,0 +1,16 @@
+[
+  {
+    "id": "acme_hmo_basic",
+    "insurer": "Acme Health",
+    "name": "Acme HMO Basic",
+    "network": "acme_hmo_network",
+    "market": "individual"
+  },
+  {
+    "id": "acme_ppo_plus",
+    "insurer": "Acme Health",
+    "name": "Acme PPO Plus",
+    "network": "acme_ppo_network",
+    "market": "individual"
+  }
+]
