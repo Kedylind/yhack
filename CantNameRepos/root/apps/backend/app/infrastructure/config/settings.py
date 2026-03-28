@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
 
 
 class Settings(BaseSettings):
@@ -7,8 +8,8 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     api_v1_prefix: str = "/api/v1"
 
-    mongodb_uri: str = "mongodb://localhost:27017"
-    mongodb_db_name: str = "acne_assistant"
+    mongodb_uri: str = os.get("MONGODB_URI")
+    mongodb_db_name: str = "CostCare"
 
     rules_path: str = "seed/rules"
     providers_seed_path: str = "seed/providers.json"
