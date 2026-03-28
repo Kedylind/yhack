@@ -6,7 +6,7 @@
 **Hosting:** Railway.  
 **Hero journey:** *“I need a colonoscopy in Boston — where and how much?”* (generalizes to other GI scenarios via CPT bundles).
 
-**Development process:** The **entire** implementation follows **test-driven development (TDD)** — no production logic is added without a failing test first, then minimal code to pass, then refactor. Details are in **§2.1** (Test-driven development — mandatory).
+**Engineering discipline (non-negotiable):** The **whole** product — backend, importer, frontend, merges from `CantNameRepos` / `frontend-mockup`, and CI — is built with **test-driven development (TDD)**. **Red → Green → Refactor** applies to **every** layer: there is no separate “fast path” that skips tests. Production logic is not added without a **failing** automated test first, then the smallest change to pass, then refactor. The only carve-outs are the **narrow** ones listed in **§2.1** (spikes that never ship; purely config/visual one-offs — and wrappers around data still get tests).
 
 ---
 
@@ -52,6 +52,8 @@ flowchart LR
 - **Frontend** is presentation, filters, and map interactions; no secret keys in the client.
 
 ### 2.1 Test-driven development (TDD) — mandatory
+
+**Default workflow for every layer:** Import scripts, Mongo access, FastAPI routes, domain services, LLM adapters, React pages/hooks, and API client wrappers all use TDD — not only “core” business logic. **Bugfixes** and **refactors** also start from a failing test (or a new test that locks intended behavior) before behavior changes.
 
 **Policy:** Every feature, bugfix, and refactor in this project uses **Red → Green → Refactor**.
 
@@ -120,7 +122,31 @@ yhack/
 └── docker-compose.yml        # optional: local API + Mongo
 ```
 
-Adjust names to taste; keep **data import** separate from **API** so you can re-run imports without redeploying app code.
+Adjust names to taste; keep **data import** separate from **API** so you can re-run imports without redeploying app code. **TDD:** Add tests in the same layout as `app/` and `src/` (§2.1); new behavior lands **test-first** — files may be created in tandem, but the failing test defines the contract before implementation ships.
+
+### 3.1 Existing code inventory and merge strategy
+
+Two temporary folders in the workspace contain code to fold into the layout above. **Goal:** one runnable app under `yhack/backend/` and `yhack/frontend/`, then **delete** `CantNameRepos/` and `frontend-mockup/`. Do not keep duplicate app roots long term.
+
+| Source | What it is | How it fits the plan |
+|--------|------------|----------------------|
+| **`CantNameRepos/root/apps/backend/`** | FastAPI app (`create_app`), **PyMongo** client singleton (`get_database()`), `pydantic-settings` (`MONGODB_URI`, `mongodb_db_name`, seed paths), routers under **`/api/v1`**: health, evaluate, providers, plans; layered code (domain / application / infrastructure / api); **pytest** (unit + integration); `scripts/seed_mongo.py` and JSON seeds | **Infrastructure scaffold:** MongoDB connectivity, FastAPI structure, repository pattern, and test layout are reusable. **Domain is wrong for v1** (acne care navigation, different intake/evaluate model). Replace business rules, DTOs, and seeds with **Boston GI + BCBS MA** per §4–§5. **Rename** defaults (e.g. app name, DB name) to match this product. |
+| **`CantNameRepos/root/apps/frontend/`** | Minimal **Next.js** App Router pages (`intake`, `results`) and small API helpers | **Not** the canonical UI. Treat as disposable reference only; **do not** merge as the primary frontend. |
+| **`frontend-mockup/`** | **Vite + React + TypeScript**, **TanStack Query**, **shadcn/ui** + Tailwind, **Leaflet** + OpenStreetMap tiles; **React Router**; client-only **`AuthContext`** (login/signup are stubs); multi-step **`/onboarding`**; **`/map`** with list/side panel, filters, mock providers + cost estimates; **`/saved`**, **`/settings`**, landing **`/`** | **Canonical user flow and UI** for v1. Merge into `yhack/frontend/` per §3. Replace mock map data with real **`/api/providers`** and **`/api/estimate`** (or equivalent per §5.3). Wire onboarding fields to **`/api/intake`** (and confirmation/estimate steps as they exist). Narrow “care focus” / specialty filters to **Gastroenterology** and Boston scope per §1. |
+
+**Merge order (high level)**
+
+**TDD for integration:** For each slice you port (health, providers, intake, map data), write or adapt **failing** tests against the **target** Boston GI contracts **first**, then move code until green. Do not copy large blocks of production code without tests attached.
+
+1. Materialize **`backend/`** and **`frontend/`** at the repo root to match §3 (if not already present).
+2. **Backend:** Port/adapt the CantNameRepos backend into `backend/app/`, then **realign** routes and payloads to **§5.3** (today’s sample code uses `/api/v1/...` and acne-specific bodies — refactor to the plan’s contract, still TDD).
+3. **Frontend:** Copy **`frontend-mockup`** into `frontend/` (not the CantNameRepos Next app). Add `VITE_API_BASE_URL` (or project convention) and typed fetch wrappers; remove hardcoded mocks when APIs exist.
+4. **Verify** local run: API + Mongo + single frontend dev server; CI green (§2.1).
+5. **Remove** `CantNameRepos/` and `frontend-mockup/` once redundant.
+
+**Auth:** The mockup’s login/signup are **demo-only** (no PHI; local state). Align with §5.2 (stateless vs session) — full accounts are out of scope for v1 unless explicitly added later.
+
+**Map:** The mockup uses **Leaflet + OSM** (no Mapbox token for basemap). That satisfies the “map UI” requirement; optional switch to Mapbox/Google later without changing the product contract.
 
 ---
 
@@ -173,6 +199,8 @@ Align with your data explorer narrative; refine field names when CSVs exist.
 ---
 
 ## 5. Backend (FastAPI)
+
+**TDD:** Each endpoint, validator, and service function is driven by tests per §2.1: contract tests (request/response) for routes; **unit tests** for pure logic (scenario → bundle, pricing, OOP, provenance). Mongo-backed behavior uses a **test database**, mongomock, or testcontainers — not only manual checks.
 
 ### 5.1 Configuration
 
@@ -244,24 +272,29 @@ Implement the formula from your product docs (insured path), e.g. deductible + c
 
 ## 6. Frontend (React)
 
-### 6.1 Stack
+**TDD:** Vitest + Testing Library for components, hooks, and client-side helpers (§2.1). New UI behavior: **failing test** (render + user flow or hook contract) → implementation → refactor. Mock `fetch` / API modules for map and forms; keep **merged mockup** code honest by replacing mocks with tests against real API shapes as endpoints land.
+
+### 6.1 Stack (aligned with `frontend-mockup` merge)
 
 - **Vite + React + TypeScript**
-- **TanStack Query** for server state (optional but helpful)
-- **Map:** Mapbox GL JS **or** Google Maps JavaScript API — pick one and stick to it for the weekend
-- **UI:** minimal component library (e.g. Radix + Tailwind) for speed
+- **TanStack Query** for server state
+- **Map:** **Leaflet** with **OpenStreetMap** raster tiles (as in the mockup). Mapbox or Google Maps remain optional later if the team standardizes on one SDK.
+- **UI:** **shadcn/ui** (Radix) + **Tailwind** — already present in the mockup; keep for speed and consistency.
+- **Routing:** **React Router** — routes include `/`, optional `/login` & `/signup` (demo auth shell), **`/onboarding`** (multi-step intake), **`/map`**, **`/saved`**, **`/settings`**.
 
-### 6.2 Screen flow
+### 6.2 Screen flow (authoritative UX from mockup, content from §1)
 
-1. **Step 1 — Intake form:** ZIP, plan selection (BCBS demo plans), symptoms/severity, free text.
-2. **Step 2 — Confirmation:** show missing fields; render LLM-suggested questions as short forms; user confirms/edits.
-3. **Step 3 — Map:** Boston default viewport; **filters** (hospital, distance, optional “has price from source X”); **markers**; **selected provider drawer** with min–max, provenance list, assumptions, disclaimer copy.
+1. **Landing (`/`):** Marketing hero + “how it works”; entry to signup/login or onboarding as needed.
+2. **Onboarding (`/onboarding`):** Three steps — **About you** (name, DOB, Boston-area ZIP, optional phone), **Coverage** (carrier, plan name, member id optional, plan type, deductible, OOP max, optional copay/coinsurance), **Care focus** (specialty selector → **default to Gastroenterology** for this product). Persist via client state and/or **`POST /api/intake`** per §5.2–§5.3.
+3. **Confirmation (when LLM step ships):** Either a dedicated route or a step after onboarding — show missing fields; LLM follow-ups; strict schema merge. Can mirror mockup patterns (stepper, forms).
+4. **Map (`/map`):** Boston viewport; **specialty / search filters**; **markers** on Leaflet; **list + detail** pattern (side panel / `ProviderCard`); **selected provider** shows estimate breakdown, provenance, assumptions, disclaimer — replace mock **`MOCK_PROVIDERS` / `MOCK_ESTIMATES`** with API responses shaped like §5.3.
+5. **Saved / Settings:** **`/saved`**, **`/settings`** — keep as lightweight UX from mockup; backend persistence optional for v1 (local state acceptable for hackathon).
 
 ### 6.3 Map behavior
 
-- **Initial load:** `GET /api/providers?bbox=...` or load all Boston providers if count stays ~O(100).
-- **Filtering:** client-side if payload small; server-side if you grow beyond that.
-- **Click marker:** show panel; if estimates not embedded in list, `GET /api/providers/{id}` with session context.
+- **Initial load:** `GET /api/providers` with appropriate query params (`bbox`, `zip`, etc. per §5.3) or load all Boston GI providers if the payload stays small.
+- **Filtering:** client-side first (matches mockup); move heavy filters server-side if needed.
+- **Marker click / list click:** set selected provider; fetch or embed **estimates** — if not in list response, `GET /api/providers/{id}` with session or intake context.
 
 ### 6.4 Copy and compliance (UX)
 
@@ -282,22 +315,23 @@ Implement the formula from your product docs (insured path), e.g. deductible + c
 
 ### 7.2 Environment variables
 
-Set in Railway dashboard: `MONGODB_URI`, `LLM_API_KEY`, `CORS_ORIGINS`, any proxy secrets.
+Set in Railway dashboard: `MONGODB_URI`, `LLM_API_KEY`, `CORS_ORIGINS`, any proxy secrets. For the Vite frontend build, set **`VITE_API_BASE_URL`** (or the project’s chosen name) to the public API origin so the merged **`frontend-mockup`**-derived client calls production, not localhost.
 
 ### 7.3 Post-deploy
 
 - Run **CSV import** once per data refresh.
 - Verify `/api/health` and a smoke test: intake → confirm → map loads with markers.
+- **TDD gate:** Deploy only from commits where **CI already ran pytest + frontend tests** (§2.1); automated suites are the safety net, manual smoke is additive.
 
 ---
 
 ## 8. Implementation phases (ordered)
 
-Each phase **starts with tests** (Red) and is **done** only when new tests pass in CI (Green) and code is refactored as needed.
+**TDD is the phase gate:** Each phase **starts with tests** (Red) and is **done** only when **new or updated tests** for that phase’s scope pass in CI (Green) and code is refactored as needed. No phase closes on untested features.
 
 | Phase | Deliverable | Exit criteria |
 |-------|-------------|----------------|
-| **0** | Repo skeleton, README, sample CSVs | **Tests:** importer fixture tests fail until script exists, then pass; CI runs pytest + Vitest on empty or smoke suites |
+| **0** | Repo skeleton, README, sample CSVs; **merge** code from §3.1 into `backend/` + `frontend/`, remove temporary folders | **Tests:** importer fixture tests fail until script exists, then pass; CI runs pytest + Vitest on empty or smoke suites; **one** dev workflow documented (API + Mongo + Vite). After success, **`CantNameRepos/` and `frontend-mockup/` deleted** (see §3.1). |
 | **1** | Mongo schemas + import + seed data | **Tests:** import tests assert post-import counts/fields; repository or query helpers covered by unit/integration tests |
 | **2** | FastAPI read APIs + geo query | **Tests:** TestClient tests for `/api/providers` (and health) against test DB; map can plot points from API |
 | **3** | Intake + validation (no LLM) | **Tests:** unit tests for validation rules; API tests for `/api/intake` missing-field responses |
@@ -311,7 +345,7 @@ Parallelize **Phase 2** (map) with **Phase 3** (forms) if two devs are available
 
 ## 9. Testing and QA (TDD execution)
 
-This section is the **operational** companion to **§2.1**. Tests are not an afterthought — they **drive** development.
+This section is the **operational** companion to **§2.1**. Tests are not an afterthought — they **drive** development for **all** code (whole-project TDD). If a change is hard to test, **refactor for testability** first, then TDD the behavior — do not skip tests because the design is awkward.
 
 - **Backend:** `pytest` — **table-driven** cases for pricing aggregation, OOP math, provenance tags, and intake rules. Prefer **pure functions** in `services/` so tests do not need a running server.
 - **API:** `httpx.AsyncClient` or Starlette `TestClient` with **test Mongo**; one test per meaningful status code and response shape.
@@ -346,7 +380,7 @@ This section is the **operational** companion to **§2.1**. Tests are not an aft
 2. Map shows Boston GI providers with working filters.
 3. Selecting a provider shows **min–max** (or dual scenario) with **source** and **FACT vs ASSUMED**.
 4. App runs on **Railway** with Mongo-backed data (not hardcoded in frontend).
-5. **CI passes** (pytest + frontend tests): shipped behavior is covered by tests written via TDD.
+5. **CI passes** (pytest + frontend tests): **all** shipped behavior is covered by tests; **nothing** merged without following **whole-project TDD** (§2.1).
 
 ---
 

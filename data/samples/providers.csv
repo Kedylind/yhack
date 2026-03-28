@@ -1,0 +1,4 @@
+npi,name,address,city,zip,lat,lng,taxonomy,phone,specialties,source
+1234567890,Boston GI Associates,1 Medical Pl,Boston,02118,42.3346,-71.0721,207RG0100X,(617)555-0100,Gastroenterology,sample_seed
+1234567891,Mass General GI,55 Fruit St,Boston,02114,42.3632,-71.0686,207RG0100X,(617)726-2000,Gastroenterology,sample_seed
+1234567892,Brigham GI Partners,75 Francis St,Boston,02115,42.3358,-71.1065,207RG0100X,(617)732-5500,Gastroenterology,sample_seed
