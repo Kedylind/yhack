@@ -15,7 +15,7 @@ class IntakeAnswers(BaseModel):
 
 class IntakeRequest(BaseModel):
     zip_code: str = Field(..., min_length=5, max_length=10)
-    age: int = Field(..., ge=18, le=120)
+    age: int = Field(..., ge=0, le=120)
     plan_id: str
     category: ComplaintCategory
     answers: IntakeAnswers
