@@ -13,6 +13,7 @@ import Saved from "./pages/Saved";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import WhyItMatters from "./pages/WhyItMatters";
+import Team from "./pages/Team";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/why-it-matters" element={<WhyItMatters />} />
+            <Route path="/team" element={<Team />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/onboarding" element={<Onboarding />} />

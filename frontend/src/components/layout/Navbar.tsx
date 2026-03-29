@@ -18,6 +18,9 @@ const Navbar = () => {
           <Link to="/why-it-matters">
             <Button variant="ghost" size="sm">Why it matters</Button>
           </Link>
+          <Link to="/team">
+            <Button variant="ghost" size="sm">Team</Button>
+          </Link>
           {isAuthenticated ? (
             <>
               <Link to="/map">
