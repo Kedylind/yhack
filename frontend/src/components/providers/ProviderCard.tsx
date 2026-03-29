@@ -1,7 +1,12 @@
-import { MapPin, Phone, Bookmark, ExternalLink, Info } from 'lucide-react';
+import { useState } from 'react';
+import { MapPin, Phone, Bookmark, ExternalLink, Info, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { computeYourPlanEstimate } from '@/lib/payerPrice';
+import { computeYourPlanEstimate, getAllPriceSources } from '@/lib/payerPrice';
+import { computeFairHealthTotal } from '@/lib/fairHealth';
+import { computeOop } from '@/lib/oopRules';
+import type { HospitalApi } from '@/api/client';
+import type { PlanConfig } from '@/lib/hospitalRatesCsv';
 import type { Provider, CostEstimate } from '@/types';
 
 interface ProviderCardProps {
@@ -15,6 +20,14 @@ interface ProviderCardProps {
   deductible?: number;
   /** User's coinsurance % from insurance profile. */
   coinsurancePct?: number;
+  /** Full hospital record for multi-source transparency display. */
+  hospital?: HospitalApi;
+  /** Plan config for rule-aware OOP calculation. */
+  planConfig?: PlanConfig;
+  /** Scenario ID from procedure selection (e.g. 'colonoscopy_screening'). */
+  scenarioId?: string | null;
+  /** Selected CPT code. */
+  cptCode?: string | null;
   onSave?: () => void;
   saved?: boolean;
   compact?: boolean;
@@ -84,6 +97,15 @@ function buildPriceDisplay(
   };
 }
 
+const SOURCE_TIPS: Record<string, string> = {
+  negotiated: 'Rate published by the hospital in their Machine-Readable File. This is what your insurer agreed to pay.',
+  tic: 'Rate published by the insurer in their Transparency in Coverage file. May differ from hospital-reported rate.',
+  de_identified: 'Range of rates this hospital accepts from all insurers. Required under the Hospital Price Transparency rule.',
+  gross: "The hospital's list price before insurance discounts. Almost no one pays this.",
+  cash: 'Discounted price for self-pay / uninsured patients.',
+  benchmark: 'Aggregated pricing data from an external benchmark source.',
+};
+
 const ProviderCard = ({
   provider,
   estimate,
@@ -91,10 +113,15 @@ const ProviderCard = ({
   hospitalPayerPrice,
   deductible,
   coinsurancePct,
+  hospital,
+  planConfig,
+  scenarioId,
+  cptCode,
   onSave,
   saved = false,
   compact = false,
 }: ProviderCardProps) => {
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const hasPrice = hospitalPayerPrice != null || (estimate?.allowedMaxDollars ?? 0) > 0;
   const price = buildPriceDisplay(hospitalPayerPrice, deductible, coinsurancePct, estimate);
 
@@ -170,6 +197,114 @@ const ProviderCard = ({
               </TooltipContent>
             </Tooltip>
           </p>
+        </div>
+      )}
+
+      {/* Plan-rule OOP estimate (replaces naive formula when planConfig is available) */}
+      {!compact && hospitalPayerPrice != null && planConfig && scenarioId && (
+        <div className="bg-primary/5 border border-primary/15 rounded-xl p-4 mb-4">
+          {(() => {
+            const oop = computeOop(hospitalPayerPrice, planConfig, scenarioId, cptCode ?? null);
+            return (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Your out-of-pocket estimate</p>
+                {oop.ruleType === 'preventive' ? (
+                  <div className="flex justify-between text-sm font-semibold">
+                    <span>Cost</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      $0
+                      <span className="text-xs font-normal bg-green-50 text-green-700 px-2 py-0.5 rounded-full">ACA preventive</span>
+                    </span>
+                  </div>
+                ) : oop.ruleType === 'copay_only' ? (
+                  <div className="flex justify-between text-sm font-semibold">
+                    <span>Specialist copay</span>
+                    <span>${oop.estimate.toLocaleString()}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">If deductible not met</span>
+                      <span className="font-semibold">${oop.estimate.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">If deductible already met</span>
+                      <span className="font-semibold">${oop.estimateB.toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+                <p className="text-xs text-muted-foreground mt-2 flex items-start gap-1">
+                  <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                  {oop.explanation}
+                </p>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Multi-source price transparency (expanded view only) */}
+      {!compact && hospital && (
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => setSourcesOpen(!sourcesOpen)}
+            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors w-full"
+          >
+            {sourcesOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            All price sources
+          </button>
+          {sourcesOpen && (
+            <div className="bg-muted/50 rounded-xl p-4 mt-2 space-y-1.5">
+              {getAllPriceSources(hospital, insuranceLabel).map((src, i) => (
+                <div key={i} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    {src.label}
+                    <Tooltip>
+                      <TooltipTrigger asChild><Info className="w-3 h-3 cursor-help" /></TooltipTrigger>
+                      <TooltipContent className="text-xs max-w-xs">
+                        <p>{SOURCE_TIPS[src.kind] ?? 'Price data from public transparency filings.'}</p>
+                        {src.billing_class && <p className="mt-1">Billing class: {src.billing_class}</p>}
+                      </TooltipContent>
+                    </Tooltip>
+                  </span>
+                  <span className="font-medium">${Math.round(src.price).toLocaleString()}</span>
+                </div>
+              ))}
+
+              {/* FAIR Health 80th percentile breakdown */}
+              {(() => {
+                const fh = computeFairHealthTotal(hospital);
+                if (!fh) return null;
+                return (
+                  <div className="pt-2 mt-2 border-t border-border">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        FAIR Health 80th %ile
+                        <Tooltip>
+                          <TooltipTrigger asChild><Info className="w-3 h-3 cursor-help" /></TooltipTrigger>
+                          <TooltipContent className="text-xs max-w-xs">
+                            80% of patients pay this amount or less. National benchmark broken down by physician, facility, and anesthesia.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                      <span className="font-medium">${fh.total.toLocaleString()}</span>
+                    </div>
+                    {fh.components.map(c => (
+                      <div key={c.label} className="flex justify-between text-xs text-muted-foreground pl-4">
+                        <span>{c.label}</span>
+                        <span>${c.amount.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {getAllPriceSources(hospital, insuranceLabel).length === 0 && (
+                <p className="text-xs text-muted-foreground italic">No price sources available for this hospital.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

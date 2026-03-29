@@ -16,6 +16,7 @@ import { useAuth } from '@/context/AuthContext';
 import { fetchProviders, fetchHospitals, postEstimate, type ProviderApi, type HospitalApi } from '@/api/client';
 import { apiEstimateToCostEstimate } from '@/lib/mapEstimate';
 import { getPayerPrice, computeYourPlanEstimate, carrierKeyFromLabel } from '@/lib/payerPrice';
+import { PLAN_CONFIGS, type PlanConfig } from '@/lib/hospitalRatesCsv';
 
 function toProvider(p: ProviderApi): Provider {
   return {
@@ -92,6 +93,31 @@ const MapPage = () => {
   const markersRef = useRef<L.LayerGroup | null>(null);
 
   const selectedSpecialty = (intakePayload?.specialty as string) || (intakePayload?.care_focus as string) || 'Gastroenterology';
+
+  // Derive plan config for rule-aware OOP calculation
+  const activePlanConfig = useMemo<PlanConfig | undefined>(() => {
+    const planName = insurance?.planName;
+    if (planName) {
+      const match = PLAN_CONFIGS.find(p => p.planName === planName);
+      if (match) return match;
+    }
+    // Fallback: build from insurance profile
+    if (insurance?.deductible != null && insurance?.coinsurance != null) {
+      const carrierKey = carrierKeyFromLabel(insuranceCarrierLabel);
+      return {
+        id: 'user_custom',
+        payer: insuranceCarrierLabel,
+        carrierKey,
+        planName: insurance.planName ?? 'Custom',
+        planType: (insurance.planType as 'PPO' | 'HMO') ?? 'PPO',
+        deductible: Number(insurance.deductible),
+        oopMax: Number(insurance.oopMax ?? 0),
+        coinsurancePct: Number(insurance.coinsurance),
+        copaySpecialist: Number(insurance.copay ?? 50),
+      };
+    }
+    return undefined;
+  }, [insurance, insuranceCarrierLabel]);
 
   const providersQuery = useQuery({
     queryKey: ['providers', selectedSpecialty],
@@ -399,6 +425,10 @@ const MapPage = () => {
                     const h = hospitals.find(x => x.name === selectedProvider.hospital);
                     return h ? getPayerPrice(h, insuranceCarrierLabel) : null;
                   })()}
+                  hospital={hospitals.find(x => x.name === selectedProvider.hospital)}
+                  planConfig={activePlanConfig}
+                  scenarioId={selectedCrt?.bundleId ?? null}
+                  cptCode={selectedCrt?.cpt ?? null}
                   deductible={insurance?.deductible}
                   coinsurancePct={insurance?.coinsurance}
                   onSave={() => toggleSave(selectedProvider.id)}
