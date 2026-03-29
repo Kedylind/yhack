@@ -19,7 +19,7 @@ const Index = () => (
       <div className="container mx-auto px-4 py-20 md:py-32 text-center max-w-3xl animate-fade-in">
         <div className="inline-flex items-center gap-2 bg-primary/10 text-foreground rounded-full px-4 py-1.5 text-sm font-medium mb-6">
           <Heart className="w-4 h-4 fill-primary stroke-primary" />
-          Boston-area healthcare cost estimates
+          Healthcare cost estimate calculator
         </div>
         <h1 className="text-4xl md:text-6xl font-bold leading-tight mb-6">
           Care that doesn't
@@ -27,7 +27,7 @@ const Index = () => (
           <span className="text-primary">surprise you</span>
         </h1>
         <p className="text-lg text-muted-foreground mb-10 max-w-xl mx-auto leading-relaxed">
-          Find providers in the Boston area and see personalized cost estimates based on your coverage — before you walk in.
+          Find providers near you and see personalized cost estimates based on your coverage, before you walk in.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link to="/signup">
