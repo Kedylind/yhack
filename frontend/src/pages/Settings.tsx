@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
@@ -9,8 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/context/AuthContext';
 import type { InsuranceProfile } from '@/types';
 import { toast } from 'sonner';
-import { insuranceProfileToApi, patchUserMe, userProfileToApi } from '@/api/client';
+import {
+  fetchInsuranceOptions,
+  insuranceProfileToApi,
+  patchUserMe,
+  userProfileToApi,
+  type InsurerOptionApi,
+} from '@/api/client';
 import { isAuth0Configured } from '@/config/auth';
+import { isBcbsInsurerKey } from '@/lib/insurance';
+import { isoToUsDisplay, maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
 
 const Settings = () => {
   const { profile, insurance, setProfile, setInsurance } = useAuth();
@@ -18,7 +26,8 @@ const Settings = () => {
   const [name, setName] = useState(profile?.fullName || '');
   const [zip, setZip] = useState(profile?.zip || '');
   const [phone, setPhone] = useState(profile?.phone || '');
-  const [dob, setDob] = useState(profile?.dob || '');
+  const [dobDisplay, setDobDisplay] = useState(isoToUsDisplay(profile?.dob));
+  const [dobError, setDobError] = useState<string | null>(null);
   const [carrier, setCarrier] = useState(insurance?.carrier || '');
   const [planName, setPlanName] = useState(insurance?.planName || '');
   const [memberId, setMemberId] = useState(insurance?.memberId || '');
@@ -28,8 +37,56 @@ const Settings = () => {
   const [copay, setCopay] = useState(insurance?.copay || 0);
   const [coinsurance, setCoinsurance] = useState(insurance?.coinsurance || 0);
 
+  const [insurers, setInsurers] = useState<InsurerOptionApi[]>([]);
+  const [bcbsPlanOptions, setBcbsPlanOptions] = useState<string[]>([]);
+  const [coverageOptionsLoading, setCoverageOptionsLoading] = useState(true);
+
+  /** Used when the API is unreachable or DB has no `hospital_rates` yet (build/deploy still works). */
+  const FALLBACK_INSURERS: InsurerOptionApi[] = [
+    { key: 'bcbs', label: 'Blue Cross Blue Shield (BCBS)', price_column: 'bcbs_price' },
+    { key: 'aetna', label: 'Aetna', price_column: 'aetna_price' },
+    { key: 'harvard_pilgrim', label: 'Harvard Pilgrim', price_column: 'harvard_pilgrim_price' },
+    { key: 'uhc', label: 'UnitedHealthcare (UHC)', price_column: 'uhc_price' },
+  ];
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchInsuranceOptions();
+        if (cancelled) return;
+        setInsurers(data.insurers.length > 0 ? data.insurers : FALLBACK_INSURERS);
+        setBcbsPlanOptions(data.bcbs_plan_options);
+      } catch {
+        if (!cancelled) {
+          setInsurers(FALLBACK_INSURERS);
+          setBcbsPlanOptions([]);
+        }
+      } finally {
+        if (!cancelled) setCoverageOptionsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedInsurerKey = useMemo(
+    () => insurers.find(i => i.label === carrier)?.key ?? '',
+    [carrier, insurers],
+  );
+  const bcbsSelected = isBcbsInsurerKey(selectedInsurerKey);
+  const bcbsPlanPicklist = bcbsSelected && bcbsPlanOptions.length > 0;
+
   const save = async () => {
-    const nextProfile = { fullName: name, zip, phone, dob };
+    const isoDob = dobDisplay ? parseUsDateToIso(dobDisplay) : undefined;
+    if (dobDisplay && !isoDob) {
+      const msg = 'Enter a valid date of birth as MM/DD/YYYY.';
+      setDobError(msg);
+      toast.error(msg);
+      return;
+    }
+    const nextProfile = { fullName: name, zip, phone, dob: isoDob };
     const nextInsurance = {
       carrier,
       planName,
@@ -65,18 +122,93 @@ const Settings = () => {
         <section className="mb-8">
           <h2 className="text-lg font-semibold mb-4">Personal info</h2>
           <div className="space-y-3">
-            <div><Label>Full name</Label><Input value={name} onChange={e => setName(e.target.value)} className="mt-1" /></div>
-            <div><Label>Date of birth</Label><Input type="date" value={dob} onChange={e => setDob(e.target.value)} className="mt-1" /></div>
-            <div><Label>ZIP code</Label><Input value={zip} onChange={e => setZip(e.target.value)} className="mt-1" /></div>
-            <div><Label>Phone</Label><Input value={phone} onChange={e => setPhone(e.target.value)} className="mt-1" /></div>
+            <div>
+              <Label>Full name</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="settings-dob">Date of birth</Label>
+              <Input
+                id="settings-dob"
+                type="text"
+                inputMode="numeric"
+                autoComplete="bday"
+                placeholder="MM/DD/YYYY"
+                value={dobDisplay}
+                onChange={e => {
+                  setDobDisplay(maskUsDateDigits(e.target.value));
+                  setDobError(null);
+                }}
+                className="mt-1"
+                maxLength={10}
+              />
+              {dobError && <p className="text-xs text-destructive mt-1">{dobError}</p>}
+            </div>
+            <div>
+              <Label>ZIP code</Label>
+              <Input value={zip} onChange={e => setZip(e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label>Phone</Label>
+              <Input value={phone} onChange={e => setPhone(e.target.value)} className="mt-1" />
+            </div>
           </div>
         </section>
 
         <section className="mb-8">
           <h2 className="text-lg font-semibold mb-4">Insurance</h2>
           <div className="space-y-3">
-            <div><Label>Carrier</Label><Input value={carrier} onChange={e => setCarrier(e.target.value)} className="mt-1" /></div>
-            <div><Label>Plan name</Label><Input value={planName} onChange={e => setPlanName(e.target.value)} className="mt-1" /></div>
+            <div>
+              <Label>Carrier</Label>
+              <Select
+                value={selectedInsurerKey || undefined}
+                onValueChange={key => {
+                  const opt = insurers.find(o => o.key === key);
+                  if (!opt) return;
+                  setCarrier(opt.label);
+                  setPlanName('');
+                }}
+                disabled={coverageOptionsLoading || insurers.length === 0}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select your insurer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {insurers.map(opt => (
+                    <SelectItem key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Plan name</Label>
+              {bcbsPlanPicklist ? (
+                <Select
+                  value={planName || undefined}
+                  onValueChange={v => setPlanName(v)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select a BCBS plan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bcbsPlanOptions.map(plan => (
+                      <SelectItem key={plan} value={plan}>
+                        {plan}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={planName}
+                  onChange={e => setPlanName(e.target.value)}
+                  className="mt-1"
+                  placeholder={selectedInsurerKey ? 'Enter your plan name' : 'Select a carrier first'}
+                />
+              )}
+            </div>
             <div><Label>Member ID</Label><Input value={memberId} onChange={e => setMemberId(e.target.value)} className="mt-1" /></div>
             <div>
               <Label>Plan type</Label>
