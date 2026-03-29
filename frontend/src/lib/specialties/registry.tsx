@@ -46,7 +46,7 @@ export type SpecialtySelectOption = {
 
 export const SPECIALTY_SELECT_OPTIONS: readonly SpecialtySelectOption[] = [
   { id: 'Gastroenterology', label: 'Gastroenterology', available: true },
-  { id: 'Dermatology', label: 'Dermatology (coming soon)', available: false },
+  { id: 'Dermatology', label: 'Dermatology', available: true },
 ];
 
 export const DEFAULT_SPECIALTY_ID = SPECIALTY_PLUGINS[0].id;
