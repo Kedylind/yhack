@@ -5,7 +5,8 @@ import 'leaflet/dist/leaflet.css';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import ProviderCard from '@/components/providers/ProviderCard';
-import CrtSelectionDialog, { EGD_PROCEDURES } from '@/components/CrtSelectionDialog';
+import ProcedureGateDialog from '@/components/ProcedureGateDialog';
+import { getGiLeafSelectOptions } from '@/lib/giDecisionTree';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -67,14 +68,20 @@ const MapPage = () => {
   // --- CRT selection state ---
   const [selectedCrt, setSelectedCrt] = useState<{ cpt: string; label: string; bundleId: string } | null>(null);
 
-  // Pre-populate from onboarding if user already selected a procedure
+  const giLeafOptions = useMemo(() => getGiLeafSelectOptions(), []);
+
+  // Pre-populate from onboarding if user already completed GI procedure selection
   useEffect(() => {
     if (selectedCrt) return;
-    if (typeof intakePayload?.cpt_code === 'string' && intakePayload.cpt_code) {
-      const match = EGD_PROCEDURES.find(p => p.cpt === intakePayload.cpt_code);
-      if (match) {
-        setSelectedCrt({ cpt: match.cpt, label: match.label, bundleId: match.bundleId });
-      }
+    const cpt = intakePayload?.cpt_code;
+    const bundleId = intakePayload?.bundle_id;
+    const label = intakePayload?.procedure_label;
+    if (typeof cpt === 'string' && cpt && typeof bundleId === 'string' && bundleId) {
+      setSelectedCrt({
+        cpt,
+        label: typeof label === 'string' && label ? label : 'Selected procedure',
+        bundleId,
+      });
     }
   }, [intakePayload, selectedCrt]);
 
@@ -270,10 +277,10 @@ const MapPage = () => {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      {/* CRT Selection Popup — must select before seeing prices */}
-      <CrtSelectionDialog
+      {/* Specialty → symptoms / AI → procedure; skip if onboarding already sent bundle + CPT */}
+      <ProcedureGateDialog
         open={selectedCrt === null}
-        onSelect={(cpt, label, bundleId) => setSelectedCrt({ cpt, label, bundleId })}
+        onComplete={sel => setSelectedCrt(sel)}
       />
 
       <div className="flex-1 flex flex-col lg:flex-row">
@@ -348,13 +355,13 @@ const MapPage = () => {
               </Button>
             </div>
 
-            {/* CRT procedure filter */}
+            {/* Procedure filter — all GI demo leaves (bundleId is unique) */}
             <div className="flex items-center gap-2">
               <Select
-                value={selectedCrt?.cpt ?? ''}
-                onValueChange={(val) => {
-                  const proc = EGD_PROCEDURES.find(p => p.cpt === val);
-                  if (proc) setSelectedCrt({ cpt: proc.cpt, label: proc.label, bundleId: proc.bundleId });
+                value={selectedCrt?.bundleId ?? ''}
+                onValueChange={bundleId => {
+                  const opt = giLeafOptions.find(o => o.bundleId === bundleId);
+                  if (opt) setSelectedCrt({ cpt: opt.cptCode, label: opt.title, bundleId: opt.bundleId });
                 }}
               >
                 <SelectTrigger className="w-full text-sm">
@@ -363,9 +370,9 @@ const MapPage = () => {
                 <SelectContent>
                   <SelectGroup>
                     <SelectLabel>Gastroenterology</SelectLabel>
-                    {EGD_PROCEDURES.filter((p, i, arr) => arr.findIndex(x => x.cpt === p.cpt) === i).map(p => (
-                      <SelectItem key={p.cpt} value={p.cpt}>
-                        {p.label} (CPT {p.cpt})
+                    {giLeafOptions.map(opt => (
+                      <SelectItem key={opt.bundleId} value={opt.bundleId}>
+                        {opt.title} (CPT {opt.cptCode})
                       </SelectItem>
                     ))}
                   </SelectGroup>

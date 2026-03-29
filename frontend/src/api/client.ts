@@ -99,3 +99,44 @@ export async function fetchHospitals(cpt?: string): Promise<HospitalApi[]> {
 export async function postIntake(intake: Record<string, unknown>): Promise<{ normalized: Record<string, unknown>; missing_required: string[] }> {
   return json('/api/intake', { method: 'POST', body: JSON.stringify(intake) });
 }
+
+export type GiAssistantSuggestResponse = {
+  recommended_next_id: string | null;
+  assistant_message: string;
+  confidence: 'high' | 'medium' | 'low';
+};
+
+export async function postGiAssistantSuggest(body: {
+  current_node_id: string;
+  question_prompt: string;
+  hint?: string | null;
+  options: { label: string; nextId: string }[];
+  symptom_notes?: string;
+  user_message?: string;
+}): Promise<GiAssistantSuggestResponse> {
+  return json<GiAssistantSuggestResponse>('/api/gi-assistant/suggest-next', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export type GiSymptomRefineResponse = {
+  phase: 'continue' | 'propose';
+  next_question: string | null;
+  recommended_leaf_id: string | null;
+  assistant_message: string;
+  /** Short labels for tap buttons; empty when the model wants free text */
+  choice_options?: string[];
+  confidence: 'high' | 'medium' | 'low';
+  rationale: string | null;
+};
+
+export async function postGiSymptomRefine(body: {
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  symptom_notes?: string;
+}): Promise<GiSymptomRefineResponse> {
+  return json<GiSymptomRefineResponse>('/api/gi-assistant/symptom-refine', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}

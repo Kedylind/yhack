@@ -184,3 +184,38 @@ export type GiProcedureSelection = {
 export function getGiNode(id: string): GiTreeNode | undefined {
   return GI_PROCEDURE_NODES[id];
 }
+
+/** All leaf procedures for map filter / intake (bundleId is unique; CPT may repeat). */
+export function getGiLeafSelectOptions(): { bundleId: string; cptCode: string; title: string }[] {
+  return Object.values(GI_PROCEDURE_NODES)
+    .filter((n): n is GiLeafNode => n.kind === 'leaf')
+    .map(n => ({ bundleId: n.bundleId, cptCode: n.cptCode, title: n.title }));
+}
+
+/** BFS path from root to a leaf (for applying AI-proposed leaves while staying tree-valid). */
+export function getPathIdsToLeaf(leafId: string): string[] | null {
+  const target = GI_PROCEDURE_NODES[leafId];
+  if (!target || target.kind !== 'leaf') return null;
+
+  const queue: { id: string; path: string[] }[] = [{ id: GI_PROCEDURE_ROOT_ID, path: [GI_PROCEDURE_ROOT_ID] }];
+  const seen = new Set<string>();
+
+  while (queue.length > 0) {
+    const { id, path } = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    const n = GI_PROCEDURE_NODES[id];
+    if (!n) continue;
+
+    if (n.kind === 'leaf') {
+      if (n.id === leafId) return path;
+      continue;
+    }
+
+    for (const opt of n.options) {
+      queue.push({ id: opt.nextId, path: [...path, opt.nextId] });
+    }
+  }
+  return null;
+}

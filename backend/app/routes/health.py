@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter
 
 from app.config import get_settings
@@ -6,7 +8,7 @@ router = APIRouter()
 
 
 @router.get("/health")
-def health() -> dict[str, str]:
+def health() -> dict[str, Any]:
     """Includes safe DB hints so you can confirm the API matches import_csv (same Atlas vs local)."""
     s = get_settings()
     uri = s.mongodb_uri
@@ -15,4 +17,5 @@ def health() -> dict[str, str]:
         "status": "ok",
         "mongodb_db_name": s.mongodb_db_name,
         "mongodb_connection_mode": mode,
+        "lava_configured": bool(s.lava_api_key),
     }

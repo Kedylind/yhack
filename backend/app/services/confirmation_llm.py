@@ -37,9 +37,19 @@ class FakeLLMClient:
 
 
 class OpenAICompatibleClient:
+    """OpenAI-compatible HTTP client: direct OpenAI or Lava gateway (Gemini, etc.)."""
+
     def __init__(self, settings: Settings) -> None:
-        self._api_key = settings.llm_api_key
-        self._model = settings.llm_model
+        if settings.lava_api_key:
+            self._api_key = settings.lava_api_key
+            self._base_url = settings.lava_api_base_url.rstrip("/")
+            self._model = settings.lava_gemini_model
+            self._json_response_format = False  # Gemini via Lava: rely on prompt; avoid unsupported response_format
+        else:
+            self._api_key = settings.llm_api_key
+            self._base_url = "https://api.openai.com/v1"
+            self._model = settings.llm_model
+            self._json_response_format = True
 
     def confirm_fields(self, payload: dict[str, Any], schema_hint: str) -> LlmConfirmJson:
         if not self._api_key:
@@ -53,18 +63,21 @@ class OpenAICompatibleClient:
             "Never invent prices or network status. Propose follow-up questions only from allowed topics."
         )
         user = json.dumps({"fields": payload, "schema": schema_hint})
+        url = f"{self._base_url}/chat/completions"
+        req_json: dict[str, Any] = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
+        if self._json_response_format:
+            req_json["response_format"] = {"type": "json_object"}
         with httpx.Client(timeout=60.0) as client:
             r = client.post(
-                "https://api.openai.com/v1/chat/completions",
+                url,
                 headers={"Authorization": f"Bearer {self._api_key}"},
-                json={
-                    "model": self._model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "response_format": {"type": "json_object"},
-                },
+                json=req_json,
             )
             r.raise_for_status()
             data = r.json()
@@ -94,6 +107,6 @@ def validate_llm_confirm(raw: dict[str, Any]) -> LlmConfirmJson:
 
 def get_llm_client() -> LLMClient:
     settings = get_settings()
-    if settings.llm_api_key:
+    if settings.lava_api_key or settings.llm_api_key:
         return OpenAICompatibleClient(settings)
     return FakeLLMClient()
