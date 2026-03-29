@@ -17,6 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import { fetchProviders, fetchHospitals, postEstimate, type ProviderApi, type HospitalApi } from '@/api/client';
 import { apiEstimateToCostEstimate } from '@/lib/mapEstimate';
 import { getPayerPrice, computeYourPlanEstimate, carrierKeyFromLabel } from '@/lib/payerPrice';
+import { loadGiContinuity, saveGiContinuity } from '@/lib/giContinuity';
 
 function toProvider(p: ProviderApi): Provider {
   return {
@@ -59,7 +60,7 @@ function payerDisplayLabel(carrier: string): string {
 }
 
 const MapPage = () => {
-  const { intakePayload, insurance } = useAuth();
+  const { intakePayload, insurance, user } = useAuth();
   const insuranceCarrierLabel =
     (typeof intakePayload?.insurance_carrier === 'string' && intakePayload.insurance_carrier) ||
     insurance?.carrier ||
@@ -84,6 +85,22 @@ const MapPage = () => {
       });
     }
   }, [intakePayload, selectedCrt]);
+
+  useEffect(() => {
+    if (!selectedCrt) return;
+    const prev = loadGiContinuity(user?.email);
+    saveGiContinuity(user?.email, {
+      careFocus: 'Gastroenterology',
+      insuranceCarrier: insuranceCarrierLabel,
+      symptomNotes: prev?.symptomNotes ?? '',
+      procedure: {
+        bundleId: selectedCrt.bundleId,
+        scenarioId: selectedCrt.bundleId,
+        cptCode: selectedCrt.cpt,
+        title: selectedCrt.label,
+      },
+    });
+  }, [selectedCrt, user?.email, insuranceCarrierLabel]);
 
   // --- Filter / search state ---
   const [searchQuery, setSearchQuery] = useState('');

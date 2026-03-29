@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.services.personal_assistant import lava_chat_completion, parse_json_from_llm_text
+from app.services.safety_crisis import crisis_response_payload, crisis_scan_messages
 
 # Keep in sync with frontend `GI_PROCEDURE_NODES` leaves (giDecisionTree.ts).
 GI_LEAF_CATALOG: list[dict[str, str]] = [
@@ -92,6 +93,12 @@ class GiSymptomRefineResponse(BaseModel):
         None,
         description="Short reason for the proposed mapping (for transparency, not medical advice)",
     )
+    safety_hold: bool = Field(
+        False,
+        description="True = crisis language detected; client must show resources and skip estimates.",
+    )
+    safety_message: str = ""
+    safety_resources: list[dict[str, str]] = Field(default_factory=list)
 
 
 def _build_system_prompt() -> str:
@@ -138,6 +145,21 @@ def refine_symptom_session(
     settings = get_settings()
     if not settings.lava_api_key:
         raise RuntimeError("LAVA_API_KEY is not configured")
+
+    if crisis_scan_messages(symptom_notes, list(messages)):
+        payload = crisis_response_payload()
+        return GiSymptomRefineResponse(
+            phase="continue",
+            next_question=None,
+            recommended_leaf_id=None,
+            assistant_message=payload["safety_message"],
+            choice_options=[],
+            confidence="low",
+            rationale=None,
+            safety_hold=True,
+            safety_message=payload["safety_message"],
+            safety_resources=list(payload["safety_resources"]),
+        )
 
     # Only user/assistant roles for transcript
     safe_messages: list[dict[str, str]] = []
@@ -243,4 +265,7 @@ def _normalize_response(data: dict[str, Any]) -> GiSymptomRefineResponse:
         choice_options=choice_opts,
         confidence=conf,
         rationale=rationale,
+        safety_hold=False,
+        safety_message="",
+        safety_resources=[],
     )

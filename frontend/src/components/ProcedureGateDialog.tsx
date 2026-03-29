@@ -13,6 +13,8 @@ import GiProcedureWizard from '@/components/GiProcedureWizard';
 import { SPECIALTY_SELECT_OPTIONS } from '@/lib/specialties';
 import { isGastroProcedureComplete } from '@/lib/specialties/gastro/intake';
 import type { GiProcedureSelection } from '@/lib/giDecisionTree';
+import { loadGiContinuity } from '@/lib/giContinuity';
+import { useAuth } from '@/context/AuthContext';
 
 interface ProcedureGateDialogProps {
   open: boolean;
@@ -23,19 +25,39 @@ interface ProcedureGateDialogProps {
  * Map entry gate: specialty (Gastro vs Dermatology coming soon) → symptom + AI GI wizard → CPT/bundle for estimates.
  */
 const ProcedureGateDialog = ({ open, onComplete }: ProcedureGateDialogProps) => {
+  const { user } = useAuth();
   const [step, setStep] = useState<1 | 2>(1);
   const [specialty, setSpecialty] = useState('');
   const [procedureSelection, setProcedureSelection] = useState<GiProcedureSelection | null>(null);
   const [symptomNotes, setSymptomNotes] = useState('');
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    const c = loadGiContinuity(user?.email);
+    const hasText = (c?.symptomNotes?.trim().length ?? 0) > 0;
+    if (c?.procedure || hasText) {
+      setStep(2);
+      setSpecialty('Gastroenterology');
+      setSymptomNotes(c?.symptomNotes ?? '');
+      setProcedureSelection(
+        c?.procedure
+          ? {
+              bundleId: c.procedure.bundleId,
+              scenarioId: c.procedure.scenarioId,
+              cptCode: c.procedure.cptCode,
+              title: c.procedure.title,
+              description: c.procedure.description ?? '',
+              pathIds: c.procedure.pathIds ?? [],
+            }
+          : null,
+      );
+    } else {
       setStep(1);
       setSpecialty('');
       setProcedureSelection(null);
       setSymptomNotes('');
     }
-  }, [open]);
+  }, [open, user?.email]);
 
   const handleProcedureChange = (v: GiProcedureSelection | null) => {
     setProcedureSelection(v);

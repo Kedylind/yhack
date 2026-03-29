@@ -10,16 +10,20 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.services.personal_assistant import lava_chat_completion, parse_json_from_llm_text
+from app.services.safety_crisis import crisis_scan_text, crisis_response_payload
 
 
 class GiNextSuggestion(BaseModel):
     recommended_next_id: str | None = None
     assistant_message: str = ""
     confidence: Literal["high", "medium", "low"] = "low"
+    safety_hold: bool = False
+    safety_message: str = ""
+    safety_resources: list[dict[str, str]] = Field(default_factory=list)
 
 
 def suggest_gi_next_step(
@@ -39,12 +43,27 @@ def suggest_gi_next_step(
     if not settings.lava_api_key:
         raise RuntimeError("LAVA_API_KEY is not configured")
 
+    combined = f"{symptom_notes.strip()} {user_message.strip()}".strip()
+    if crisis_scan_text(combined):
+        payload = crisis_response_payload()
+        return GiNextSuggestion(
+            recommended_next_id=None,
+            assistant_message=payload["safety_message"],
+            confidence="low",
+            safety_hold=True,
+            safety_message=payload["safety_message"],
+            safety_resources=list(payload["safety_resources"]),
+        )
+
     allowed_ids = {o["nextId"] for o in options if "nextId" in o}
     if not allowed_ids:
         return GiNextSuggestion(
             recommended_next_id=None,
             assistant_message="No options were provided for this step.",
             confidence="low",
+            safety_hold=False,
+            safety_message="",
+            safety_resources=[],
         )
 
     options_json: list[dict[str, str]] = [
@@ -97,4 +116,7 @@ def suggest_gi_next_step(
         recommended_next_id=rec,
         assistant_message=msg,
         confidence=conf,
+        safety_hold=False,
+        safety_message="",
+        safety_resources=[],
     )

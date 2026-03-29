@@ -104,6 +104,9 @@ export type GiAssistantSuggestResponse = {
   recommended_next_id: string | null;
   assistant_message: string;
   confidence: 'high' | 'medium' | 'low';
+  safety_hold?: boolean;
+  safety_message?: string;
+  safety_resources?: { label: string; href: string }[];
 };
 
 export async function postGiAssistantSuggest(body: {
@@ -129,6 +132,9 @@ export type GiSymptomRefineResponse = {
   choice_options?: string[];
   confidence: 'high' | 'medium' | 'low';
   rationale: string | null;
+  safety_hold?: boolean;
+  safety_message?: string;
+  safety_resources?: { label: string; href: string }[];
 };
 
 export async function postGiSymptomRefine(body: {

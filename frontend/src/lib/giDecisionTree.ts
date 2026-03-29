@@ -185,6 +185,14 @@ export function getGiNode(id: string): GiTreeNode | undefined {
   return GI_PROCEDURE_NODES[id];
 }
 
+/** Find a leaf node by bundle id (e.g. restoring saved continuity). */
+export function findLeafByBundleId(bundleId: string): GiLeafNode | undefined {
+  for (const n of Object.values(GI_PROCEDURE_NODES)) {
+    if (n.kind === 'leaf' && n.bundleId === bundleId) return n;
+  }
+  return undefined;
+}
+
 /** All leaf procedures for map filter / intake (bundleId is unique; CPT may repeat). */
 export function getGiLeafSelectOptions(): { bundleId: string; cptCode: string; title: string }[] {
   return Object.values(GI_PROCEDURE_NODES)

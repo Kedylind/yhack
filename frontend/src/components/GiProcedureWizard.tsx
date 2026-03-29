@@ -1,17 +1,21 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
   GI_PROCEDURE_ROOT_ID,
+  findLeafByBundleId,
   getGiNode,
   getPathIdsToLeaf,
   type GiLeafNode,
   type GiProcedureSelection,
   type GiQuestionNode,
 } from '@/lib/giDecisionTree';
+import { loadGiContinuity, saveGiContinuity, selectionToStored } from '@/lib/giContinuity';
+import { useAuth } from '@/context/AuthContext';
 import { postGiAssistantSuggest, postGiSymptomRefine, type GiSymptomRefineResponse } from '@/api/client';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { MessageCircle, Sparkles, Stethoscope } from 'lucide-react';
 
 type Props = {
@@ -47,9 +51,18 @@ function normalizeChoiceOptions(res: GiSymptomRefineResponse): string[] {
 }
 
 const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange }: Props) => {
+  const { user, insurance, intakePayload } = useAuth();
+  const insuranceCarrier =
+    insurance?.carrier ??
+    (typeof intakePayload?.insurance_carrier === 'string' ? intakePayload.insurance_carrier : undefined);
+
   const [flow, setFlow] = useState<Flow>('symptoms');
   const [nodeId, setNodeId] = useState(GI_PROCEDURE_ROOT_ID);
   const [pathIds, setPathIds] = useState<string[]>([GI_PROCEDURE_ROOT_ID]);
+
+  const [safetyHold, setSafetyHold] = useState(false);
+  const [safetyMessage, setSafetyMessage] = useState('');
+  const [safetyResources, setSafetyResources] = useState<{ label: string; href: string }[]>([]);
 
   const [symptomStarted, setSymptomStarted] = useState(false);
   const [sessionMessages, setSessionMessages] = useState<ChatTurn[]>([]);
@@ -103,7 +116,19 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
     setSymptomError(null);
     setSymptomQuickReplies([]);
     setPendingProposal(null);
+    setSafetyHold(false);
+    setSafetyMessage('');
+    setSafetyResources([]);
   }, []);
+
+  useEffect(() => {
+    saveGiContinuity(user?.email, {
+      careFocus: 'Gastroenterology',
+      insuranceCarrier,
+      symptomNotes,
+      procedure: value ? selectionToStored(value) : null,
+    });
+  }, [user?.email, insuranceCarrier, symptomNotes, value]);
 
   const reset = useCallback(() => {
     setFlow('symptoms');
@@ -114,6 +139,9 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
     setAiRecommendedNextId(null);
     setAiConfidence(null);
     setAiError(null);
+    setSafetyHold(false);
+    setSafetyMessage('');
+    setSafetyResources([]);
   }, [resetTreeNav, resetSymptomSession]);
 
   const goToTreeMode = useCallback(() => {
@@ -133,6 +161,17 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
           messages: nextMessages,
           symptom_notes: symptomNotes,
         });
+        if (res.safety_hold) {
+          setSafetyHold(true);
+          const msg = (res.safety_message || res.assistant_message || '').trim();
+          setSafetyMessage(msg);
+          setSafetyResources(res.safety_resources ?? []);
+          setSessionMessages([...nextMessages, { role: 'assistant', content: msg }]);
+          return true;
+        }
+        setSafetyHold(false);
+        setSafetyMessage('');
+        setSafetyResources([]);
         const assistantContent = buildAssistantBubble(res);
         setSessionMessages([...nextMessages, { role: 'assistant', content: assistantContent }]);
         if (res.phase === 'propose') {
@@ -204,6 +243,18 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
         symptom_notes: symptomNotes,
         user_message: stepAiUserText,
       });
+      if (res.safety_hold) {
+        setSafetyHold(true);
+        setSafetyMessage(res.safety_message || res.assistant_message || '');
+        setSafetyResources(res.safety_resources ?? []);
+        setStepAiMessage(res.safety_message || res.assistant_message);
+        setAiRecommendedNextId(null);
+        setAiConfidence(res.confidence);
+        return;
+      }
+      setSafetyHold(false);
+      setSafetyMessage('');
+      setSafetyResources([]);
       setStepAiMessage(res.assistant_message);
       setAiRecommendedNextId(res.recommended_next_id);
       setAiConfidence(res.confidence);
@@ -250,8 +301,68 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
     [applyLeaf, pathIds],
   );
 
+  const continuitySnap = useMemo(() => loadGiContinuity(user?.email), [user?.email]);
+  const canResumeWizard = Boolean(continuitySnap?.procedure && !value && !safetyHold);
+
+  const resumeFromContinuity = useCallback(() => {
+    const snap = loadGiContinuity(user?.email);
+    if (!snap?.procedure) return;
+    const leaf = findLeafByBundleId(snap.procedure.bundleId);
+    if (!leaf) return;
+    const path =
+      snap.procedure.pathIds && snap.procedure.pathIds.length > 0
+        ? snap.procedure.pathIds
+        : getPathIdsToLeaf(leaf.id);
+    if (!path) return;
+    applyLeaf(leaf, path);
+    setFlow('tree');
+    setSymptomStarted(true);
+  }, [user?.email, applyLeaf]);
+
+  const clearSavedProcedure = useCallback(() => {
+    const snap = loadGiContinuity(user?.email);
+    saveGiContinuity(user?.email, {
+      careFocus: 'Gastroenterology',
+      insuranceCarrier: snap?.insuranceCarrier ?? insuranceCarrier,
+      symptomNotes: snap?.symptomNotes ?? symptomNotes,
+      procedure: null,
+    });
+  }, [user?.email, insuranceCarrier, symptomNotes]);
+
   return (
     <div className="space-y-6">
+      {safetyHold && (
+        <Alert variant="destructive" className="border-destructive/50">
+          <AlertTitle>Support and safety</AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{safetyMessage}</p>
+            <p className="text-xs text-muted-foreground">
+              Cost estimates are turned off for this chat. If you are in immediate danger, call 911. For thoughts of
+              self-harm, call or text 988.
+            </p>
+            {safetyResources.length > 0 && (
+              <ul className="flex flex-wrap gap-2 list-none p-0 m-0">
+                {safetyResources.map(r => (
+                  <li key={r.href + r.label}>
+                    <a
+                      href={r.href}
+                      className="text-sm font-medium text-primary underline underline-offset-2"
+                      target={r.href.startsWith('http') ? '_blank' : undefined}
+                      rel={r.href.startsWith('http') ? 'noreferrer' : undefined}
+                    >
+                      {r.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={() => resetSymptomSession()}>
+              Clear chat and start over
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div>
         <Label htmlFor="symptom-notes" className="text-base font-semibold">
           Symptoms or goals <span className="text-muted-foreground font-normal">(optional)</span>
@@ -262,6 +373,7 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
           value={symptomNotes}
           onChange={e => onSymptomNotesChange(e.target.value)}
           className="mt-2 min-h-[72px] resize-y"
+          disabled={safetyHold}
         />
         <p className="text-xs text-muted-foreground mt-2">
           We start from what you feel and what you need—billing codes only come in once we narrow things down for your
@@ -280,7 +392,24 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
             only; this isn’t medical advice.
           </p>
 
-          {!symptomStarted && (
+          {canResumeWizard && continuitySnap?.procedure && (
+            <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 space-y-2">
+              <p className="text-sm text-foreground">
+                Pick up where you left off: <span className="font-semibold">{continuitySnap.procedure.title}</span>{' '}
+                <span className="font-mono text-xs text-muted-foreground">(CPT {continuitySnap.procedure.cptCode})</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" onClick={() => resumeFromContinuity()}>
+                  Resume with saved procedure
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => clearSavedProcedure()}>
+                  Clear saved
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!symptomStarted && !safetyHold && (
             <Button
               type="button"
               className="bg-primary text-primary-foreground hover:bg-primary-hover"
@@ -318,7 +447,7 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
             </div>
           )}
 
-          {symptomStarted && !pendingProposal && symptomQuickReplies.length > 0 && (
+          {symptomStarted && !pendingProposal && !safetyHold && symptomQuickReplies.length > 0 && (
             <div className="space-y-2 animate-fade-in">
               <p className="text-xs font-medium text-foreground">Pick one (fastest)</p>
               <div className="flex flex-wrap gap-2">
@@ -379,7 +508,7 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
             );
           })()}
 
-          {symptomStarted && !pendingProposal && (
+          {symptomStarted && !pendingProposal && !safetyHold && (
             <div className="space-y-2">
               <Label htmlFor="symptom-reply" className="text-xs text-muted-foreground">
                 {symptomQuickReplies.length > 0 ? 'Or describe in your own words' : 'Your reply'}
@@ -394,7 +523,7 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
                 value={symptomReply}
                 onChange={e => setSymptomReply(e.target.value)}
                 className="min-h-[72px] resize-y text-sm"
-                disabled={symptomLoading}
+                disabled={symptomLoading || safetyHold}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -452,14 +581,14 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
                   value={stepAiUserText}
                   onChange={e => setStepAiUserText(e.target.value)}
                   className="min-h-[64px] resize-y text-sm"
-                  disabled={aiLoading}
+                  disabled={aiLoading || safetyHold}
                 />
                 <Button
                   type="button"
                   size="sm"
                   variant="secondary"
                   className="w-full sm:w-auto"
-                  disabled={aiLoading}
+                  disabled={aiLoading || safetyHold}
                   onClick={() => void requestAiSuggestion()}
                 >
                   {aiLoading ? 'Thinking…' : 'Get AI suggestion'}
@@ -498,6 +627,7 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
               confirmed={value?.bundleId === node.bundleId}
               onConfirm={() => confirmLeaf(node)}
               onPickDifferent={reset}
+              confirmDisabled={safetyHold}
             />
           )}
 
@@ -556,11 +686,13 @@ function LeafPanel({
   confirmed,
   onConfirm,
   onPickDifferent,
+  confirmDisabled,
 }: {
   node: GiLeafNode;
   confirmed: boolean;
   onConfirm: () => void;
   onPickDifferent: () => void;
+  confirmDisabled?: boolean;
 }) {
   return (
     <div className="space-y-3 rounded-xl bg-primary/5 border border-primary/15 p-4 animate-fade-in">
@@ -570,8 +702,17 @@ function LeafPanel({
       <p className="text-xs text-muted-foreground">
         CPT <span className="font-mono font-medium text-foreground">{node.cptCode}</span>
       </p>
+      {confirmDisabled && (
+        <p className="text-xs text-destructive">Cost estimates are unavailable until you clear the safety notice above.</p>
+      )}
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button type="button" size="sm" className="bg-primary text-primary-foreground hover:bg-primary-hover" onClick={onConfirm}>
+        <Button
+          type="button"
+          size="sm"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover"
+          disabled={confirmDisabled}
+          onClick={onConfirm}
+        >
           {confirmed ? 'Confirmed ✓' : 'Use this for estimates'}
         </Button>
         <Button type="button" size="sm" variant="outline" onClick={onPickDifferent}>
