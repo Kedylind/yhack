@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
+from datetime import datetime
 
 # --- Intake ---
 
@@ -136,3 +137,11 @@ class ProvidersQuery(BaseModel):
     hospital: str | None = None
     in_network_only: bool | None = None
     specialty: str | None = None
+
+class UserResponse(BaseModel):
+    id: str
+    email: EmailStr
+    full_name: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime

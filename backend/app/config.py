@@ -14,6 +14,11 @@ class Settings(BaseSettings):
 
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "boston_gi_demo"
+    JWT_SECRET_KEY: str = "dev-secret-change-me"
+
+    AUTH0_DOMAIN: str = ""
+    AUTH0_AUDIENCE: str = ""
+    AUTH0_ISSUER: str = ""
 
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
