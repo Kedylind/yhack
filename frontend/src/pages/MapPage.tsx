@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
 import ProviderCard from '@/components/providers/ProviderCard';
 import ProcedureGateDialog from '@/components/ProcedureGateDialog';
 import { getGiLeafSelectOptions } from '@/lib/giDecisionTree';
@@ -18,6 +17,7 @@ import { fetchProviders, fetchHospitals, postEstimate, type ProviderApi, type Ho
 import { apiEstimateToCostEstimate } from '@/lib/mapEstimate';
 import { getPayerPrice, computeYourPlanEstimate, carrierKeyFromLabel } from '@/lib/payerPrice';
 import { loadGiContinuity, saveGiContinuity } from '@/lib/giContinuity';
+import { cn } from '@/lib/utils';
 
 function toProvider(p: ProviderApi): Provider {
   return {
@@ -291,8 +291,10 @@ const MapPage = () => {
   const payerLabel = payerDisplayLabel(insuranceCarrierLabel);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Navbar />
+    <div className="flex h-dvh max-h-dvh flex-col bg-background">
+      <div className="shrink-0">
+        <Navbar />
+      </div>
 
       {/* Specialty → symptoms / AI → procedure; skip if onboarding already sent bundle + CPT */}
       <ProcedureGateDialog
@@ -300,8 +302,16 @@ const MapPage = () => {
         onComplete={sel => setSelectedCrt(sel)}
       />
 
-      <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
-        <div className="flex-1 relative min-h-[min(420px,52vh)] sm:min-h-[400px] lg:min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        {/* Map: fills remaining column height on desktop; on mobile shares viewport with list toggle */}
+        <div
+          className={cn(
+            'relative w-full min-h-0 overflow-hidden lg:min-h-0 lg:flex-1',
+            showList
+              ? 'h-[42vh] max-h-[420px] shrink-0 lg:h-auto lg:max-h-none'
+              : 'flex-1',
+          )}
+        >
           <div ref={mapContainerRef} className="absolute inset-0 z-0" />
 
           <div className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 z-[1000] lg:hidden">
@@ -325,9 +335,12 @@ const MapPage = () => {
         </div>
 
         <div
-          className={`lg:w-[420px] bg-card border-l border-border overflow-y-auto max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:overscroll-y-contain ${showList ? 'block' : 'hidden lg:block'}`}
+          className={cn(
+            'flex min-h-0 flex-col bg-card border-border lg:flex lg:w-[420px] lg:max-w-[420px] lg:shrink-0 lg:grow-0 lg:border-l',
+            showList ? 'max-lg:flex-1' : 'max-lg:hidden',
+          )}
         >
-          <div className="p-4 border-b border-border space-y-3">
+          <div className="shrink-0 space-y-3 border-b border-border p-4">
             {loadError && (
               <p className="text-sm text-destructive">
                 Could not load map data. Run the API on port 8000, ensure MongoDB is running, and seed providers
@@ -403,7 +416,9 @@ const MapPage = () => {
             </div>
           </div>
 
-          <div className="p-4 space-y-3">
+          <div
+            className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          >
             {selectedProvider ? (
               <div>
                 <button type="button" onClick={() => setSelectedProvider(null)} className="text-sm text-primary hover:underline mb-3">
@@ -528,10 +543,12 @@ const MapPage = () => {
               </div>
             )}
           </div>
+
+          <div className="shrink-0 border-t border-border px-4 py-2 text-[10px] leading-snug text-muted-foreground">
+            Estimates depend on your plan and insurer rules. Confirm with your plan documents.
+          </div>
         </div>
       </div>
-
-      <Footer />
     </div>
   );
 };
