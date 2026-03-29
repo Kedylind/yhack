@@ -21,6 +21,9 @@ const Navbar = () => {
           <Link to="/team">
             <Button variant="ghost" size="sm">Team</Button>
           </Link>
+          <Link to="/our-data">
+            <Button variant="ghost" size="sm">Our Data</Button>
+          </Link>
           {isAuthenticated ? (
             <>
               <Link to="/map">
