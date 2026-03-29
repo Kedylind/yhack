@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     samples_dir: str = "../data/samples"
+    # MVP: NPI providers + hospital CPT rates (see data/az-data)
+    az_data_dir: str = "../data/az-data"
 
     model_config = SettingsConfigDict(
         env_file=".env",

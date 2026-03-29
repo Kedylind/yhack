@@ -12,5 +12,9 @@ dist/
 .mypy_cache/
 .ruff_cache/
 data/raw/
+# MVP CSVs (load locally with scripts/import_csv_to_mongo.py --az-mvp)
+data/az-data/
 coverage/
 .DS_Store
+logs/
+data/

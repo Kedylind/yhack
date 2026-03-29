@@ -5,9 +5,14 @@ from pathlib import Path
 import mongomock
 import pytest
 
-from app.services.csv_import import import_sample_directory, ensure_indexes
+from app.services.csv_import import (
+    ensure_indexes,
+    import_az_directory,
+    import_sample_directory,
+)
 
 SAMPLES = Path(__file__).resolve().parent.parent.parent / "data" / "samples"
+AZ_DATA = Path(__file__).resolve().parent.parent.parent / "data" / "az-data"
 
 
 @pytest.fixture
@@ -41,3 +46,27 @@ def test_import_sample_providers_prices_counts(db):
 def test_ensure_indexes_does_not_raise(db):
     import_sample_directory(db, SAMPLES)
     ensure_indexes(db)
+
+
+def test_import_az_mvp_providers_and_hospital_rates(db):
+    counts = import_az_directory(db, AZ_DATA, price_hospital_id="bmc")
+    assert counts.get("providers", 0) > 0
+    assert counts.get("hospital_rates", 0) > 0
+    assert counts.get("prices", 0) > 0
+
+    p = db["providers"].find_one({"source": "az_mvp"})
+    assert p is not None
+    assert p["location"]["type"] == "Point"
+    assert len(p["location"]["coordinates"]) == 2
+
+    hr = db["hospital_rates"].find_one({"hospital_id": "bmc", "cpt": "45378"})
+    assert hr is not None
+    assert hr["de_identified_min"] is not None
+
+    npi = p["npi"]
+    price = db["prices"].find_one(
+        {"provider_id": npi, "bundle_id": "colonoscopy_screening", "source": "az_mvp"}
+    )
+    assert price is not None
+    assert price["min_rate_cents"] > 0
+    assert price["mvp_hospital_id"] == "bmc"
