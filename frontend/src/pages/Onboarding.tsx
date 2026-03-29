@@ -1,4 +1,4 @@
-import { createElement, useMemo, useState } from 'react';
+import { createElement, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -9,18 +9,16 @@ import Stepper from '@/components/Stepper';
 import Navbar from '@/components/layout/Navbar';
 import type { UserProfile, InsuranceProfile } from '@/types';
 import { CheckCircle2 } from 'lucide-react';
+import type { InsurerOptionApi } from '@/api/client';
 import {
+  fetchInsuranceOptions,
   insuranceProfileToApi,
   patchUserMe,
   postIntake,
   userProfileToApi,
 } from '@/api/client';
 import { isAuth0Configured } from '@/config/auth';
-import {
-  BCBS_PLAN_OPTIONS,
-  INSURERS_FROM_RATES,
-  isBcbsInsurerKey,
-} from '@/lib/hospitalRatesCsv';
+import { isBcbsInsurerKey } from '@/lib/insurance';
 import { maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
 import {
   DEFAULT_SPECIALTY_ID,
@@ -29,6 +27,14 @@ import {
 } from '@/lib/specialties';
 
 const STEPS = ['About you', 'Coverage', 'Specialty', 'Procedure'];
+
+/** Used when the API is unreachable or DB has no `hospital_rates` yet (build/deploy still works). */
+const FALLBACK_INSURERS: InsurerOptionApi[] = [
+  { key: 'bcbs', label: 'Blue Cross Blue Shield (BCBS)', price_column: 'bcbs_price' },
+  { key: 'aetna', label: 'Aetna', price_column: 'aetna_price' },
+  { key: 'harvard_pilgrim', label: 'Harvard Pilgrim', price_column: 'harvard_pilgrim_price' },
+  { key: 'uhc', label: 'UnitedHealthcare (UHC)', price_column: 'uhc_price' },
+];
 
 const Onboarding = () => {
   const [step, setStep] = useState(0);
@@ -44,14 +50,40 @@ const Onboarding = () => {
   /** Opaque per-specialty state (e.g. GiProcedureSelection for Gastroenterology). */
   const [procedureSelection, setProcedureSelection] = useState<unknown>(null);
   const [done, setDone] = useState(false);
+  const [insurers, setInsurers] = useState<InsurerOptionApi[]>([]);
+  const [bcbsPlanOptions, setBcbsPlanOptions] = useState<string[]>([]);
+  const [coverageOptionsLoading, setCoverageOptionsLoading] = useState(true);
   const { setProfile: saveProfile, setInsurance: saveInsurance, setIntakePayload, completeOnboarding } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchInsuranceOptions();
+        if (cancelled) return;
+        setInsurers(data.insurers.length > 0 ? data.insurers : FALLBACK_INSURERS);
+        setBcbsPlanOptions(data.bcbs_plan_options);
+      } catch {
+        if (!cancelled) {
+          setInsurers(FALLBACK_INSURERS);
+          setBcbsPlanOptions([]);
+        }
+      } finally {
+        if (!cancelled) setCoverageOptionsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const selectedInsurerKey = useMemo(
-    () => INSURERS_FROM_RATES.find(i => i.label === insurance.carrier)?.key ?? '',
-    [insurance.carrier],
+    () => insurers.find(i => i.label === insurance.carrier)?.key ?? '',
+    [insurance.carrier, insurers],
   );
   const bcbsSelected = isBcbsInsurerKey(selectedInsurerKey);
+  const bcbsPlanPicklist = bcbsSelected && bcbsPlanOptions.length > 0;
 
   const next = () => setStep(s => Math.min(s + 1, 3));
   const back = () => setStep(s => Math.max(s - 1, 0));
@@ -183,12 +215,15 @@ const Onboarding = () => {
         {step === 1 && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold">Your coverage</h2>
+            {coverageOptionsLoading && (
+              <p className="text-sm text-muted-foreground">Loading insurance options…</p>
+            )}
             <div>
               <Label>Insurance carrier</Label>
               <Select
                 value={selectedInsurerKey || undefined}
                 onValueChange={key => {
-                  const opt = INSURERS_FROM_RATES.find(o => o.key === key);
+                  const opt = insurers.find(o => o.key === key);
                   if (!opt) return;
                   setInsurance(ins => ({
                     ...ins,
@@ -196,12 +231,13 @@ const Onboarding = () => {
                     planName: '',
                   }));
                 }}
+                disabled={coverageOptionsLoading || insurers.length === 0}
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select your insurer" />
                 </SelectTrigger>
                 <SelectContent>
-                  {INSURERS_FROM_RATES.map(opt => (
+                  {insurers.map(opt => (
                     <SelectItem key={opt.key} value={opt.key}>
                       {opt.label}
                     </SelectItem>
@@ -211,7 +247,7 @@ const Onboarding = () => {
             </div>
             <div>
               <Label>Plan name</Label>
-              {bcbsSelected ? (
+              {bcbsPlanPicklist ? (
                 <Select
                   value={insurance.planName || undefined}
                   onValueChange={v => setInsurance(ins => ({ ...ins, planName: v }))}
@@ -220,7 +256,7 @@ const Onboarding = () => {
                     <SelectValue placeholder="Select a BCBS plan" />
                   </SelectTrigger>
                   <SelectContent>
-                    {BCBS_PLAN_OPTIONS.map(plan => (
+                    {bcbsPlanOptions.map(plan => (
                       <SelectItem key={plan} value={plan}>
                         {plan}
                       </SelectItem>
@@ -231,7 +267,7 @@ const Onboarding = () => {
                 <Input
                   value={insurance.planName}
                   onChange={e => setInsurance(ins => ({ ...ins, planName: e.target.value }))}
-                  placeholder="Plan name"
+                  placeholder={bcbsSelected ? 'BCBS plan name' : 'Plan name'}
                   className="mt-1"
                   disabled={!insurance.carrier}
                 />
@@ -272,7 +308,17 @@ const Onboarding = () => {
             </div>
             <div className="flex gap-3 mt-2">
               <Button variant="outline" className="flex-1 h-11" onClick={back}>Back</Button>
-              <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary-hover h-11" onClick={next} disabled={!insurance.carrier || !insurance.planName}>Continue</Button>
+              <Button
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary-hover h-11"
+                onClick={next}
+                disabled={
+                  coverageOptionsLoading ||
+                  !insurance.carrier ||
+                  !insurance.planName
+                }
+              >
+                Continue
+              </Button>
             </div>
           </div>
         )}

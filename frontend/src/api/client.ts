@@ -191,6 +191,21 @@ export async function fetchHospitals(cpt?: string): Promise<HospitalApi[]> {
   return json<HospitalApi[]>(`/api/hospitals${q}`);
 }
 
+export type InsurerOptionApi = {
+  key: string;
+  label: string;
+  price_column: string;
+};
+
+export type InsuranceOptionsApi = {
+  insurers: InsurerOptionApi[];
+  bcbs_plan_options: string[];
+};
+
+export async function fetchInsuranceOptions(): Promise<InsuranceOptionsApi> {
+  return json<InsuranceOptionsApi>('/api/hospitals/insurance-options');
+}
+
 export async function postIntake(intake: Record<string, unknown>): Promise<{ normalized: Record<string, unknown>; missing_required: string[] }> {
   return json('/api/intake', { method: 'POST', body: JSON.stringify(intake) });
 }
