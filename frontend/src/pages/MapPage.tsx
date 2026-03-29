@@ -63,7 +63,7 @@ function payerDisplayLabel(carrier: string): string {
 
 const MapPage = () => {
   const navigate = useNavigate();
-  const { intakePayload, insurance } = useAuth();
+  const { intakePayload, insurance, user } = useAuth();
   const insuranceCarrierLabel =
     (typeof intakePayload?.insurance_carrier === 'string' && intakePayload.insurance_carrier) ||
     insurance?.carrier ||

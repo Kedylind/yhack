@@ -82,7 +82,7 @@ const Team = () => (
     <Navbar />
 
     <main className="flex-1">
-      <section className="container mx-auto px-4 py-12 md:py-16 max-w-5xl">
+      <section className="container mx-auto px-4 py-10 sm:py-12 md:py-16 max-w-5xl pb-[max(2rem,env(safe-area-inset-bottom))]">
         <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-3 text-center">Team</p>
         <h1 className="text-2xl md:text-3xl font-bold text-center mb-8 max-w-3xl mx-auto leading-tight">
           Four continents, one mission

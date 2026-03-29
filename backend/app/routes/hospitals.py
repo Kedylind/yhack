@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 
 from app.api.deps import DbDep
+from app.services.insurance_options import build_insurance_options
 
 router = APIRouter()
 
@@ -44,6 +45,12 @@ _HOSPITAL_INFO: dict[str, dict[str, Any]] = {
     "CHA Cambridge Hospital": {"id": "cha", "lat": 42.3667, "lng": -71.1050},
     "Franciscan Childrens": {"id": "franciscan", "lat": 42.3540, "lng": -71.1530},
 }
+
+
+@router.get("/insurance-options")
+def get_insurance_options(db: DbDep) -> dict[str, Any]:
+    """Insurer keys/labels and BCBS plan names derived from `hospital_rates` (MongoDB)."""
+    return build_insurance_options(db)
 
 
 @router.get("")

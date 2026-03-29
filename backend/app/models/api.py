@@ -138,10 +138,17 @@ class ProvidersQuery(BaseModel):
     in_network_only: bool | None = None
     specialty: str | None = None
 
-class UserResponse(BaseModel):
-    id: str
-    email: EmailStr
-    full_name: str
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
+
+# --- Users (Auth0 + Mongo profile) ---
+
+
+class UserMeResponse(BaseModel):
+    sub: str
+    email: EmailStr | None = None
+    user_profile: dict[str, Any] | None = None
+    insurance_profile: dict[str, Any] | None = None
+
+
+class UserMePatch(BaseModel):
+    user_profile: dict[str, Any] | None = None
+    insurance_profile: dict[str, Any] | None = None

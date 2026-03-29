@@ -37,6 +37,18 @@ export const SPECIALTY_PLUGINS: readonly SpecialtyPlugin[] = [
   },
 ];
 
+/** All rows shown in the specialty dropdown; `available: false` means disabled (coming soon). */
+export type SpecialtySelectOption = {
+  id: string;
+  label: string;
+  available: boolean;
+};
+
+export const SPECIALTY_SELECT_OPTIONS: readonly SpecialtySelectOption[] = [
+  { id: 'Gastroenterology', label: 'Gastroenterology', available: true },
+  { id: 'Dermatology', label: 'Dermatology (coming soon)', available: false },
+];
+
 export const DEFAULT_SPECIALTY_ID = SPECIALTY_PLUGINS[0].id;
 
 export function getSpecialtyPlugin(id: string): SpecialtyPlugin | undefined {

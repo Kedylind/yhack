@@ -1,6 +1,7 @@
-import { createElement, useMemo, useState } from 'react';
+import { createElement, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { isInsuranceProfileComplete, isUserProfileComplete } from '@/lib/profileComplete';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,19 +10,41 @@ import Stepper from '@/components/Stepper';
 import Navbar from '@/components/layout/Navbar';
 import type { UserProfile, InsuranceProfile } from '@/types';
 import { CheckCircle2 } from 'lucide-react';
-import { postIntake } from '@/api/client';
+import type { InsurerOptionApi } from '@/api/client';
 import {
-  INSURERS_FROM_RATES,
-  getPlansForCarrier,
-} from '@/lib/hospitalRatesCsv';
+  fetchInsuranceOptions,
+  insuranceProfileToApi,
+  patchUserMe,
+  postIntake,
+  userProfileToApi,
+} from '@/api/client';
+import { isAuth0Configured } from '@/config/auth';
 import { maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
 import {
   DEFAULT_SPECIALTY_ID,
-  SPECIALTY_PLUGINS,
+  SPECIALTY_SELECT_OPTIONS,
   getSpecialtyPlugin,
 } from '@/lib/specialties';
+import { PLAN_CONFIGS } from '@/lib/hospitalRatesCsv';
 
 const STEPS = ['About you', 'Coverage', 'Specialty', 'Procedure'];
+
+const GENERIC_PLAN_FALLBACK = [
+  'Commercial PPO',
+  'Commercial HMO',
+  'Medicare Advantage',
+  'Other — see insurance card',
+];
+
+const BCBS_PLAN_FALLBACK = ['Plan name not listed in hospital data file'];
+
+/** Used when the API is unreachable or DB has no `hospital_rates` yet (build/deploy still works). */
+const FALLBACK_INSURERS: InsurerOptionApi[] = [
+  { key: 'bcbs', label: 'Blue Cross Blue Shield (BCBS)', price_column: 'bcbs_price' },
+  { key: 'aetna', label: 'Aetna', price_column: 'aetna_price' },
+  { key: 'harvard_pilgrim', label: 'Harvard Pilgrim', price_column: 'harvard_pilgrim_price' },
+  { key: 'uhc', label: 'UnitedHealthcare (UHC)', price_column: 'uhc_price' },
+];
 
 const Onboarding = () => {
   const [step, setStep] = useState(0);
@@ -31,23 +54,109 @@ const Onboarding = () => {
   const [dobDisplay, setDobDisplay] = useState('');
   const [dobError, setDobError] = useState<string | null>(null);
   const [insurance, setInsurance] = useState<InsuranceProfile>({
-    carrier: '', planName: '', planType: 'PPO', deductible: 0, oopMax: 0,
+    carrier: '',
+    planName: '',
+    planType: 'PPO',
+    deductible: 0,
+    oopMax: 0,
+    coinsurance: 0,
   });
   const [symptomNotes, setSymptomNotes] = useState('');
   /** Opaque per-specialty state (e.g. GiProcedureSelection for Gastroenterology). */
   const [procedureSelection, setProcedureSelection] = useState<unknown>(null);
   const [done, setDone] = useState(false);
-  const { setProfile: saveProfile, setInsurance: saveInsurance, setIntakePayload, completeOnboarding } = useAuth();
+  const [insurers, setInsurers] = useState<InsurerOptionApi[]>([]);
+  const [planOptionsByInsurer, setPlanOptionsByInsurer] = useState<Record<string, string[]>>({});
+  const [coverageOptionsLoading, setCoverageOptionsLoading] = useState(true);
+  const {
+    setProfile: saveProfile,
+    setInsurance: saveInsurance,
+    setIntakePayload,
+    completeOnboarding,
+    meReady,
+    isAuthenticated,
+    profile: authProfile,
+    insurance: authInsurance,
+    onboardingComplete,
+  } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (!isAuthenticated || !meReady) return;
+    const auth0 = isAuth0Configured();
+    const wizardDone = auth0 ? authProfile?.onboardingCompleted === true : onboardingComplete;
+    if (
+      wizardDone &&
+      isUserProfileComplete(authProfile) &&
+      isInsuranceProfileComplete(authInsurance)
+    ) {
+      navigate('/map', { replace: true });
+    }
+  }, [
+    isAuthenticated,
+    meReady,
+    authProfile,
+    authInsurance,
+    onboardingComplete,
+    navigate,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchInsuranceOptions();
+        if (cancelled) return;
+        setInsurers(data.insurers.length > 0 ? data.insurers : FALLBACK_INSURERS);
+        const byIns: Record<string, string[]> = { ...(data.plan_options_by_insurer ?? {}) };
+        if ((byIns.bcbs?.length ?? 0) === 0 && data.bcbs_plan_options?.length) {
+          byIns.bcbs = data.bcbs_plan_options;
+        }
+        setPlanOptionsByInsurer(byIns);
+      } catch {
+        if (!cancelled) {
+          setInsurers(FALLBACK_INSURERS);
+          setPlanOptionsByInsurer({});
+        }
+      } finally {
+        if (!cancelled) setCoverageOptionsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const selectedInsurerKey = useMemo(
-    () => INSURERS_FROM_RATES.find(i => i.label === insurance.carrier)?.key ?? '',
-    [insurance.carrier],
+    () => insurers.find(i => i.label === insurance.carrier)?.key ?? '',
+    [insurance.carrier, insurers],
   );
-  const availablePlans = useMemo(
-    () => getPlansForCarrier(selectedInsurerKey),
-    [selectedInsurerKey],
-  );
+
+  const planChoices = useMemo(() => {
+    const key = selectedInsurerKey;
+    if (!key) return [];
+    const fromData = planOptionsByInsurer[key] ?? [];
+    if (fromData.length > 0) return fromData;
+    if (key === 'bcbs') return BCBS_PLAN_FALLBACK;
+    return GENERIC_PLAN_FALLBACK;
+  }, [selectedInsurerKey, planOptionsByInsurer]);
+
+  // Auto-fill deductible/oopMax/coinsurance from PLAN_CONFIGS when plan matches
+  useEffect(() => {
+    if (!insurance.planName || !selectedInsurerKey) return;
+    const match = PLAN_CONFIGS.find(
+      p => p.carrierKey === selectedInsurerKey && p.planName === insurance.planName
+    );
+    if (match) {
+      setInsurance(prev => ({
+        ...prev,
+        planType: match.planType,
+        deductible: prev.deductible || match.deductible,
+        oopMax: prev.oopMax || match.oopMax,
+        coinsurance: prev.coinsurance ?? match.coinsurancePct,
+      }));
+    }
+  }, [insurance.planName, selectedInsurerKey]);
 
   const next = () => setStep(s => Math.min(s + 1, 3));
   const back = () => setStep(s => Math.max(s - 1, 0));
@@ -66,14 +175,26 @@ const Onboarding = () => {
   const submit = async () => {
     const plugin = getSpecialtyPlugin(specialty);
     if (!plugin || !plugin.isProcedureComplete(procedureSelection)) return;
-    saveProfile(profile);
+    const finishedProfile = { ...profile, onboardingCompleted: true };
+    saveProfile(finishedProfile);
     saveInsurance(insurance);
 
+    if (isAuth0Configured()) {
+      try {
+        await patchUserMe({
+          user_profile: userProfileToApi(finishedProfile),
+          insurance_profile: insuranceProfileToApi(insurance),
+        });
+      } catch {
+        /* offline or API */
+      }
+    }
+
     const intake: Record<string, unknown> = {
-      full_name: profile.fullName,
-      date_of_birth: profile.dob,
-      zip: profile.zip,
-      phone: profile.phone,
+      full_name: finishedProfile.fullName,
+      date_of_birth: finishedProfile.dob,
+      zip: finishedProfile.zip,
+      phone: finishedProfile.phone,
       insurance_carrier: insurance.carrier,
       plan_name: insurance.planName,
       member_id: insurance.memberId,
@@ -94,6 +215,17 @@ const Onboarding = () => {
     completeOnboarding();
     setDone(true);
   };
+
+  if (isAuth0Configured() && isAuthenticated && !meReady) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-sm text-muted-foreground">Loading your profile…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (done) {
     return (
@@ -168,12 +300,15 @@ const Onboarding = () => {
         {step === 1 && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold">Your coverage</h2>
+            {coverageOptionsLoading && (
+              <p className="text-sm text-muted-foreground">Loading insurance options…</p>
+            )}
             <div>
               <Label>Insurance carrier</Label>
               <Select
                 value={selectedInsurerKey || undefined}
                 onValueChange={key => {
-                  const opt = INSURERS_FROM_RATES.find(o => o.key === key);
+                  const opt = insurers.find(o => o.key === key);
                   if (!opt) return;
                   setInsurance(ins => ({
                     ...ins,
@@ -181,12 +316,13 @@ const Onboarding = () => {
                     planName: '',
                   }));
                 }}
+                disabled={coverageOptionsLoading || insurers.length === 0}
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select your insurer" />
                 </SelectTrigger>
                 <SelectContent>
-                  {INSURERS_FROM_RATES.map(opt => (
+                  {insurers.map(opt => (
                     <SelectItem key={opt.key} value={opt.key}>
                       {opt.label}
                     </SelectItem>
@@ -196,43 +332,25 @@ const Onboarding = () => {
             </div>
             <div>
               <Label>Plan name</Label>
-              {availablePlans.length > 0 ? (
-                <Select
-                  value={insurance.planName || undefined}
-                  onValueChange={v => {
-                    const plan = availablePlans.find(p => p.planName === v);
-                    if (!plan) return;
-                    setInsurance(ins => ({
-                      ...ins,
-                      planName: plan.planName,
-                      planType: plan.planType,
-                      deductible: plan.deductible,
-                      oopMax: plan.oopMax,
-                      coinsurance: plan.coinsurancePct,
-                      copay: plan.copaySpecialist,
-                    }));
-                  }}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select a plan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availablePlans.map(plan => (
-                      <SelectItem key={plan.id} value={plan.planName}>
-                        {plan.planName} ({plan.planType})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  value={insurance.planName}
-                  onChange={e => setInsurance(ins => ({ ...ins, planName: e.target.value }))}
-                  placeholder="Plan name"
-                  className="mt-1"
-                  disabled={!insurance.carrier}
-                />
-              )}
+              <p className="text-xs text-muted-foreground mt-0.5 mb-1">
+                Options come from hospital price files when available; otherwise use the closest match to your card.
+              </p>
+              <Select
+                value={insurance.planName || undefined}
+                onValueChange={v => setInsurance(ins => ({ ...ins, planName: v }))}
+                disabled={!insurance.carrier || planChoices.length === 0 || coverageOptionsLoading}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select your plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {planChoices.map(plan => (
+                    <SelectItem key={plan} value={plan}>
+                      {plan}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Member ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
@@ -263,13 +381,37 @@ const Onboarding = () => {
                 <Input type="number" value={insurance.copay || ''} onChange={e => setInsurance(ins => ({ ...ins, copay: Number(e.target.value) }))} className="mt-1" />
               </div>
               <div>
-                <Label>Coinsurance (%) <span className="text-muted-foreground font-normal">opt.</span></Label>
-                <Input type="number" value={insurance.coinsurance || ''} onChange={e => setInsurance(ins => ({ ...ins, coinsurance: Number(e.target.value) }))} className="mt-1" />
+                <Label>
+                  Coinsurance (%){' '}
+                  <span className="text-muted-foreground font-normal">after deductible; use 0 if your plan has none</span>
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={insurance.coinsurance ?? 0}
+                  onChange={e => setInsurance(ins => ({ ...ins, coinsurance: Number(e.target.value) }))}
+                  className="mt-1"
+                />
               </div>
             </div>
             <div className="flex gap-3 mt-2">
               <Button variant="outline" className="flex-1 h-11" onClick={back}>Back</Button>
-              <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary-hover h-11" onClick={next} disabled={!insurance.carrier || !insurance.planName}>Continue</Button>
+              <Button
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary-hover h-11"
+                onClick={next}
+                disabled={
+                  coverageOptionsLoading ||
+                  !insurance.carrier ||
+                  !insurance.planName ||
+                  insurance.coinsurance == null ||
+                  Number.isNaN(Number(insurance.coinsurance)) ||
+                  insurance.coinsurance < 0 ||
+                  insurance.coinsurance > 100
+                }
+              >
+                Continue
+              </Button>
             </div>
           </div>
         )}
@@ -291,9 +433,9 @@ const Onboarding = () => {
                   <SelectValue placeholder="Select a specialty" />
                 </SelectTrigger>
                 <SelectContent>
-                  {SPECIALTY_PLUGINS.map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.label}
+                  {SPECIALTY_SELECT_OPTIONS.map(opt => (
+                    <SelectItem key={opt.id} value={opt.id} disabled={!opt.available}>
+                      {opt.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
