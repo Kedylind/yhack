@@ -64,7 +64,7 @@ const WhyItMatters = () => (
 
     <main className="flex-1">
       <section className="border-b border-border bg-card/40">
-        <div className="container mx-auto px-4 py-10 md:py-14 max-w-4xl">
+        <div className="container mx-auto px-4 py-8 sm:py-10 md:py-14 max-w-4xl">
           <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-2 text-center">Why it matters</p>
           <h1 className="text-2xl md:text-3xl font-bold text-center mb-8 max-w-2xl mx-auto leading-tight">
             You are expected to pay like a shopper. The system still behaves like a black box.

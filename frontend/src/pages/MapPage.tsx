@@ -301,11 +301,16 @@ const MapPage = () => {
       />
 
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
-        <div className="flex-1 relative min-h-[400px] lg:min-h-0">
+        <div className="flex-1 relative min-h-[min(420px,52vh)] sm:min-h-[400px] lg:min-h-0">
           <div ref={mapContainerRef} className="absolute inset-0 z-0" />
 
-          <div className="absolute top-3 right-3 z-[1000] lg:hidden">
-            <Button size="sm" variant="outline" className="bg-card shadow-card" onClick={() => setShowList(!showList)}>
+          <div className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 z-[1000] lg:hidden">
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-card shadow-card min-h-11 px-3 touch-manipulation"
+              onClick={() => setShowList(!showList)}
+            >
               {showList ? (
                 <>
                   <MapPin className="w-4 h-4 mr-1" /> Map
@@ -320,7 +325,7 @@ const MapPage = () => {
         </div>
 
         <div
-          className={`lg:w-[420px] bg-card border-l border-border overflow-y-auto ${showList ? 'block' : 'hidden lg:block'}`}
+          className={`lg:w-[420px] bg-card border-l border-border overflow-y-auto max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:overscroll-y-contain ${showList ? 'block' : 'hidden lg:block'}`}
         >
           <div className="p-4 border-b border-border space-y-3">
             {loadError && (
