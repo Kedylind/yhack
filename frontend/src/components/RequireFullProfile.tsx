@@ -9,6 +9,11 @@ export default function RequireFullProfile({ children }: { children: React.React
   const { isAuthenticated, profile, insurance, meReady, onboardingComplete } = useAuth();
   const location = useLocation();
 
+  // When Auth0 is not configured, skip all guards (local demo mode)
+  if (!isAuth0Configured()) {
+    return <>{children}</>;
+  }
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
