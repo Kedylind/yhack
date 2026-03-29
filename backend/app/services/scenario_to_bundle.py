@@ -4,11 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-# Closed set for LLM / intake
+# Closed set for LLM / intake (must match keys used in prices import / decision tree).
 SCENARIO_IDS = (
     "colonoscopy_screening",
     "colonoscopy_diagnostic",
+    "colonoscopy_with_biopsy",
+    "colonoscopy_polyp",
     "egd_with_biopsy",
+    "egd_bleeding",
+    "egd_dilation",
+    "gi_imaging_ct",
+    "capsule_endoscopy",
     "gi_general",
 )
 
@@ -38,10 +44,8 @@ def infer_scenario_id(intake: dict[str, Any], confirmed: dict[str, Any] | None) 
 
 
 def scenario_to_bundle_id(scenario_id: str) -> str:
-    mapping = {
-        "colonoscopy_screening": "colonoscopy_screening",
-        "colonoscopy_diagnostic": "colonoscopy_diagnostic",
-        "egd_with_biopsy": "egd_with_biopsy",
-        "gi_general": "colonoscopy_screening",
-    }
-    return mapping.get(scenario_id, "colonoscopy_screening")
+    if scenario_id == "gi_general":
+        return "colonoscopy_screening"
+    if scenario_id in SCENARIO_IDS and scenario_id != "gi_general":
+        return scenario_id
+    return "colonoscopy_screening"

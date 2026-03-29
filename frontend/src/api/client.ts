@@ -3,6 +3,7 @@ const base = () => (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '') 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${base()}${path}`;
   const r = await fetch(url, {
+    cache: 'no-store',
     ...init,
     headers: { 'Content-Type': 'application/json', ...init?.headers },
   });
@@ -36,10 +37,12 @@ export type ProvenanceItem = {
 
 export type ProviderEstimateApi = {
   provider_id: string;
-  allowed_amount_range: { min: number; max: number; currency: string };
+  allowed_amount_range: { min: number; max: number; currency?: string };
   oop_range: { min: number; max: number; label?: string | null };
   provenance: ProvenanceItem[];
   assumptions: string[];
+  other_insurers_oop_range?: { min: number; max: number; label?: string | null } | null;
+  payer_used?: string | null;
 };
 
 export type EstimateResponseApi = {
@@ -60,6 +63,9 @@ export async function fetchProviders(params?: { specialty?: string; zip?: string
 export async function postEstimate(body: {
   intake: Record<string, unknown>;
   confirmed?: Record<string, unknown>;
+  /** When set, pricing uses this bundle’s CPT row in Mongo (see GI decision tree). */
+  bundle_id?: string;
+  scenario_id?: string;
 }): Promise<EstimateResponseApi> {
   return json<EstimateResponseApi>('/api/estimate', {
     method: 'POST',

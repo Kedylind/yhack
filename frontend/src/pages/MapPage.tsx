@@ -8,11 +8,11 @@ import ProviderCard from '@/components/providers/ProviderCard';
 import Chip from '@/components/Chip';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, List, MapPin, Building2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, List, MapPin, Building2, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import type { Provider } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { fetchProviders, postEstimate, type ProviderApi } from '@/api/client';
-import { apiEstimateToCostEstimate } from '@/lib/mapEstimate';
+import { apiEstimateToCostEstimate, formatPinPrice } from '@/lib/mapEstimate';
 
 const SPECIALTIES = ['All', 'Gastroenterology'];
 
@@ -29,18 +29,27 @@ function toProvider(p: ProviderApi): Provider {
   };
 }
 
-const createPinkIcon = () =>
-  L.divIcon({
-    html: `<div style="background:hsl(345,50%,77%);width:28px;height:28px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:flex;align-items:center;justify-content:center">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="white" stroke="white"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3" fill="hsl(345,50%,77%)"/></svg>
-  </div>`,
+/** Airbnb-style: price pill + pin (CareCost pink). */
+const createPricePinIcon = (priceLabel: string) => {
+  const safe = priceLabel.replace(/[<>]/g, '');
+  return L.divIcon({
+    html: `<div style="display:flex;flex-direction:column;align-items:center;width:max-content;pointer-events:none;">
+      <div style="background:#fff;border:1px solid hsl(345,40%,88%);border-radius:14px;padding:4px 10px;font-size:13px;font-weight:700;color:hsl(340,6%,17%);box-shadow:0 2px 10px rgba(0,0,0,0.1);white-space:nowrap;">${safe}</div>
+      <div style="width:2px;height:5px;background:hsl(345,40%,85%);"></div>
+      <div style="width:13px;height:13px;border-radius:50%;background:hsl(345,50%,77%);border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.18);"></div>
+    </div>`,
     className: '',
-    iconSize: [28, 28],
-    iconAnchor: [14, 28],
+    iconSize: [96, 56],
+    iconAnchor: [48, 56],
   });
+};
 
 const MapPage = () => {
-  const { intakePayload } = useAuth();
+  const { intakePayload, insurance } = useAuth();
+  const insuranceCarrierLabel =
+    (typeof intakePayload?.insurance_carrier === 'string' && intakePayload.insurance_carrier) ||
+    insurance?.carrier ||
+    'Your plan';
   const [selectedSpecialty, setSelectedSpecialty] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
@@ -58,6 +67,11 @@ const MapPage = () => {
       fetchProviders({
         specialty: selectedSpecialty === 'All' ? undefined : selectedSpecialty,
       }),
+    /** After Mongo re-seed, old data must not stick while you stay on /map */
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   const providers = useMemo(
@@ -67,21 +81,44 @@ const MapPage = () => {
 
   const estimateQuery = useQuery({
     queryKey: ['estimate', intakePayload],
-    queryFn: () =>
-      postEstimate({
-        intake: intakePayload ?? {
-          zip: '02118',
-          insurance_carrier: 'Blue Cross Blue Shield of Massachusetts',
-          care_focus: 'Gastroenterology',
-        },
-      }),
+    queryFn: () => {
+      const fallback = {
+        zip: '02118',
+        insurance_carrier: 'Blue Cross Blue Shield of Massachusetts',
+        care_focus: 'Gastroenterology',
+        scenario_id: 'colonoscopy_screening',
+        bundle_id: 'colonoscopy_screening',
+      };
+      const intake = { ...fallback, ...(intakePayload ?? {}) };
+      const bundle_id =
+        typeof intake.bundle_id === 'string' && intake.bundle_id
+          ? intake.bundle_id
+          : 'colonoscopy_screening';
+      const scenario_id =
+        typeof intake.scenario_id === 'string' && intake.scenario_id ? intake.scenario_id : bundle_id;
+      return postEstimate({ intake, bundle_id, scenario_id });
+    },
     enabled: true,
   });
+
+  const procedureSummary =
+    typeof intakePayload?.procedure_label === 'string'
+      ? intakePayload.procedure_label
+      : typeof intakePayload?.cpt_code === 'string'
+        ? `CPT ${intakePayload.cpt_code}`
+        : null;
+
+  const estimatesLackRates = useMemo(() => {
+    const rows = estimateQuery.data?.estimates ?? [];
+    if (rows.length === 0 || estimateQuery.isError) return false;
+    return !rows.some(r => r.allowed_amount_range.max > 0 || r.oop_range.max > 0);
+  }, [estimateQuery.data, estimateQuery.isError]);
 
   const estimateById = useMemo(() => {
     const m = new Map<string, ReturnType<typeof apiEstimateToCostEstimate>>();
     for (const e of estimateQuery.data?.estimates ?? []) {
-      m.set(e.provider_id, apiEstimateToCostEstimate(e));
+      const row = apiEstimateToCostEstimate(e);
+      m.set(row.providerId, row);
     }
     return m;
   }, [estimateQuery.data]);
@@ -135,14 +172,21 @@ const MapPage = () => {
     if (!markersRef.current) return;
     markersRef.current.clearLayers();
 
-    const icon = createPinkIcon();
     filtered.forEach(p => {
+      const est = estimateById.get(String(p.id));
+      const priceLabel = est ? formatPinPrice(est) : '—';
+      const icon = createPricePinIcon(priceLabel);
       const marker = L.marker([p.lat, p.lng], { icon })
-        .bindPopup(`<strong>${p.name}</strong><br/><span style="font-size:12px">${p.specialty.join(', ')}</span>`)
+        .bindPopup(
+          `<strong>${p.name}</strong><br/><span style="font-size:12px">${p.specialty.join(', ')}</span>` +
+            (est
+              ? `<br/><span style="font-size:12px;margin-top:4px;display:inline-block;font-weight:600;color:hsl(345,42%,45%);">Est. OOP: ${priceLabel}</span>`
+              : ''),
+        )
         .on('click', () => setSelectedProvider(p));
       markersRef.current!.addLayer(marker);
     });
-  }, [filtered]);
+  }, [filtered, estimateById]);
 
   const toggleSave = (id: string) => {
     setSavedIds(s => {
@@ -188,7 +232,41 @@ const MapPage = () => {
                 <code className="text-xs">127.0.0.1:8000</code>.
               </p>
             )}
-            {providersQuery.isLoading && <p className="text-sm text-muted-foreground">Loading providers…</p>}
+            {procedureSummary && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">Estimates for</p>
+                <p className="font-medium text-foreground leading-snug">{procedureSummary}</p>
+                {typeof intakePayload?.cpt_code === 'string' && (
+                  <p className="text-xs text-muted-foreground mt-0.5 font-mono">CPT {intakePayload.cpt_code}</p>
+                )}
+              </div>
+            )}
+            {estimatesLackRates && (
+              <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 rounded-lg px-3 py-2">
+                No hospital rates found in the database for this CPT/bundle — pins cannot show dollars. From the repo
+                root run{' '}
+                <code className="text-[11px] bg-background/80 px-1 rounded">python scripts/import_csv_to_mongo.py --az-mvp</code>{' '}
+                (same Mongo as the API), then refresh.
+              </p>
+            )}
+            <div className="flex items-center justify-between gap-2">
+              {providersQuery.isLoading && <p className="text-sm text-muted-foreground">Loading providers…</p>}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-auto shrink-0"
+                disabled={providersQuery.isFetching}
+                onClick={() => {
+                  void providersQuery.refetch();
+                  void estimateQuery.refetch();
+                }}
+                title="Reload providers from the API (use after re-seeding MongoDB)"
+              >
+                <RefreshCw className={`w-4 h-4 mr-1.5 ${providersQuery.isFetching ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -213,7 +291,8 @@ const MapPage = () => {
                 </button>
                 <ProviderCard
                   provider={selectedProvider}
-                  estimate={estimateById.get(selectedProvider.id)}
+                  estimate={estimateById.get(String(selectedProvider.id))}
+                  insuranceLabel={insuranceCarrierLabel}
                   onSave={() => toggleSave(selectedProvider.id)}
                   saved={savedIds.has(selectedProvider.id)}
                 />
@@ -239,7 +318,8 @@ const MapPage = () => {
                           <div key={p.id} onClick={() => setSelectedProvider(p)} className="cursor-pointer">
                             <ProviderCard
                               provider={p}
-                              estimate={estimateById.get(p.id)}
+                              estimate={estimateById.get(String(p.id))}
+                              insuranceLabel={insuranceCarrierLabel}
                               onSave={() => toggleSave(p.id)}
                               saved={savedIds.has(p.id)}
                               compact

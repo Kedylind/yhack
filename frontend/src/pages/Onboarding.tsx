@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { createElement, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -16,14 +16,17 @@ import {
   isBcbsInsurerKey,
 } from '@/lib/hospitalRatesCsv';
 import { maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
+import {
+  DEFAULT_SPECIALTY_ID,
+  SPECIALTY_PLUGINS,
+  getSpecialtyPlugin,
+} from '@/lib/specialties';
 
-const STEPS = ['About you', 'Coverage', 'Care focus'];
-
-/** Boston GI demo: single specialty default per product scope. */
-const SPECIALTIES = ['Gastroenterology'];
+const STEPS = ['About you', 'Coverage', 'Specialty', 'Procedure'];
 
 const Onboarding = () => {
   const [step, setStep] = useState(0);
+  const [specialty, setSpecialty] = useState(DEFAULT_SPECIALTY_ID);
   const [profile, setProfile] = useState<UserProfile>({ fullName: '', zip: '' });
   /** Display MM/DD/YYYY; ISO is stored on `profile.dob` when leaving step 0 */
   const [dobDisplay, setDobDisplay] = useState('');
@@ -31,7 +34,9 @@ const Onboarding = () => {
   const [insurance, setInsurance] = useState<InsuranceProfile>({
     carrier: '', planName: '', planType: 'PPO', deductible: 0, oopMax: 0,
   });
-  const [careFocus, setCareFocus] = useState('Gastroenterology');
+  const [symptomNotes, setSymptomNotes] = useState('');
+  /** Opaque per-specialty state (e.g. GiProcedureSelection for Gastroenterology). */
+  const [procedureSelection, setProcedureSelection] = useState<unknown>(null);
   const [done, setDone] = useState(false);
   const { setProfile: saveProfile, setInsurance: saveInsurance, setIntakePayload, completeOnboarding } = useAuth();
   const navigate = useNavigate();
@@ -42,7 +47,7 @@ const Onboarding = () => {
   );
   const bcbsSelected = isBcbsInsurerKey(selectedInsurerKey);
 
-  const next = () => setStep(s => Math.min(s + 1, 2));
+  const next = () => setStep(s => Math.min(s + 1, 3));
   const back = () => setStep(s => Math.max(s - 1, 0));
 
   const goNextFromAbout = () => {
@@ -57,8 +62,11 @@ const Onboarding = () => {
   };
 
   const submit = async () => {
+    const plugin = getSpecialtyPlugin(specialty);
+    if (!plugin || !plugin.isProcedureComplete(procedureSelection)) return;
     saveProfile(profile);
     saveInsurance(insurance);
+
     const intake: Record<string, unknown> = {
       full_name: profile.fullName,
       date_of_birth: profile.dob,
@@ -72,7 +80,8 @@ const Onboarding = () => {
       oop_max_cents: Math.round(Number(insurance.oopMax) * 100),
       copay_cents: insurance.copay != null ? Math.round(Number(insurance.copay) * 100) : undefined,
       coinsurance_pct: insurance.coinsurance,
-      care_focus: careFocus,
+      care_focus: specialty,
+      ...plugin.buildProcedureIntake(procedureSelection, { symptomNotes }),
     };
     try {
       await postIntake(intake);
@@ -101,6 +110,9 @@ const Onboarding = () => {
       </div>
     );
   }
+
+  const procedurePlugin = getSpecialtyPlugin(specialty);
+  const canFinishProcedure = procedurePlugin?.isProcedureComplete(procedureSelection) ?? false;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -250,17 +262,67 @@ const Onboarding = () => {
 
         {step === 2 && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold">What care are you looking for?</h2>
-            <p className="text-sm text-muted-foreground">This sets your default map filter. You can change it anytime.</p>
-            <Select value={careFocus} onValueChange={setCareFocus}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Select a specialty" /></SelectTrigger>
-              <SelectContent>
-                {SPECIALTIES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <h2 className="text-xl font-bold">Choose a specialty</h2>
+            <div>
+              <Label>Medical specialty</Label>
+              <Select
+                value={specialty}
+                onValueChange={v => {
+                  setSpecialty(v);
+                  setProcedureSelection(null);
+                  setSymptomNotes('');
+                }}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select a specialty" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SPECIALTY_PLUGINS.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex gap-3 mt-2">
-              <Button variant="outline" className="flex-1 h-11" onClick={back}>Back</Button>
-              <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary-hover h-11" onClick={submit} disabled={!careFocus}>Finish setup</Button>
+              <Button variant="outline" className="flex-1 h-11" onClick={back}>
+                Back
+              </Button>
+              <Button
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary-hover h-11"
+                onClick={next}
+                disabled={!specialty}
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && procedurePlugin && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold">{procedurePlugin.procedureStep.title}</h2>
+            {procedurePlugin.procedureStep.description && (
+              <p className="text-sm text-muted-foreground">{procedurePlugin.procedureStep.description}</p>
+            )}
+            {createElement(procedurePlugin.ProcedureStep, {
+              procedureState: procedureSelection,
+              setProcedureState: setProcedureSelection,
+              symptomNotes,
+              setSymptomNotes,
+            })}
+            <div className="flex gap-3 mt-2">
+              <Button variant="outline" className="flex-1 h-11" onClick={back}>
+                Back
+              </Button>
+              <Button
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary-hover h-11"
+                onClick={submit}
+                disabled={!canFinishProcedure}
+              >
+                Finish setup
+              </Button>
             </div>
           </div>
         )}

@@ -65,7 +65,12 @@ def test_import_az_mvp_providers_and_hospital_rates(db):
 
     npi = p["npi"]
     price = db["prices"].find_one(
-        {"provider_id": npi, "bundle_id": "colonoscopy_screening", "source": "az_mvp"}
+        {
+            "provider_id": npi,
+            "bundle_id": "colonoscopy_screening",
+            "source": "az_mvp",
+            "payer": "BCBS_MA",
+        }
     )
     assert price is not None
     assert price["min_rate_cents"] > 0

@@ -92,6 +92,14 @@ class ProviderEstimate(BaseModel):
     oop_range: OopRange
     provenance: list[ProvenanceItem]
     assumptions: list[str]
+    other_insurers_oop_range: OopRange | None = Field(
+        default=None,
+        description="OOP band across other payers (min of lower bounds, max of upper bounds).",
+    )
+    payer_used: str | None = Field(
+        default=None,
+        description="Payer key used for primary oop_range (matches prices.payer).",
+    )
 
 
 class EstimateRequest(BaseModel):

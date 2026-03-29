@@ -19,7 +19,21 @@ export interface CostEstimate {
   deductibleApplied?: number;
   copay?: number;
   coinsurance?: number;
+  /** Upper end of estimated OOP band for your plan (USD whole dollars). */
   patientResponsibility: number;
+  /** Lower end of your-plan OOP band (USD). */
+  oopMin?: number;
+  /** Upper end of your-plan OOP band (USD). */
+  oopMax?: number;
+  /** Min of other payers' OOP lower bounds (USD). */
+  otherInsurersOopMin?: number;
+  /** Max of other payers' OOP upper bounds (USD). */
+  otherInsurersOopMax?: number;
+  /** Backend payer key used for primary estimate. */
+  payerUsed?: string;
+  /** Negotiated allowed amount (USD) from payer rate row — used when OOP band is $0 on pin. */
+  allowedMinDollars?: number;
+  allowedMaxDollars?: number;
   note?: string;
 }
 

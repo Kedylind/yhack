@@ -12,8 +12,14 @@ from pymongo.database import Database
 # Scenario bundle → CPT used to pick a row in hospital_rates (MVP; aligns with az CPT list).
 BUNDLE_CPT_AZ_MVP: dict[str, str] = {
     "colonoscopy_screening": "45378",
-    "colonoscopy_diagnostic": "45380",
+    "colonoscopy_diagnostic": "45378",
+    "colonoscopy_with_biopsy": "45380",
+    "colonoscopy_polyp": "45385",
     "egd_with_biopsy": "43235",
+    "egd_bleeding": "43255",
+    "egd_dilation": "43249",
+    "gi_imaging_ct": "74176",
+    "capsule_endoscopy": "91110",
     "gi_general": "45378",
 }
 
@@ -290,14 +296,24 @@ def import_hospital_rates_csv(db: Database, path: Path) -> int:
     return count
 
 
+# Hospital rate CSV columns → `prices.payer` keys (see estimate_service / payer_mapping).
+_AZ_PAYER_RATE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("bcbs_price", "BCBS_MA"),
+    ("aetna_price", "AETNA"),
+    ("harvard_pilgrim_price", "HARVARD_PILGRIM"),
+    ("uhc_price", "UHC"),
+)
+
+
 def import_az_mvp_prices(
     db: Database,
     hospital_id: str = "bmc",
     effective_date: str = "2024-01-01",
 ) -> int:
     """
-    For each NPI in `providers` with source az_mvp, upsert `prices` rows using
-    de-identified min/max from the chosen hospital's CPT row (bundles → CPT via BUNDLE_CPT_AZ_MVP).
+    For each NPI in `providers` with source az_mvp, upsert `prices` rows per payer
+    using negotiated rates from hospital_rates (bcbs/aetna/HP/UHC columns) when present,
+    else de-identified min/max for BCBS_MA only.
     """
     col = db["prices"]
     npis = [d["npi"] for d in db["providers"].find({"source": "az_mvp"}, {"npi": 1})]
@@ -311,36 +327,52 @@ def import_az_mvp_prices(
         )
         if not hr:
             continue
+
         dmin = hr.get("de_identified_min")
         dmax = hr.get("de_identified_max")
-        min_c = _dollars_to_cents(dmin) if dmin is not None else None
-        max_c = _dollars_to_cents(dmax) if dmax is not None else None
-        if min_c is None and max_c is None:
+        fallback_min_c = _dollars_to_cents(dmin) if dmin is not None else None
+        fallback_max_c = _dollars_to_cents(dmax) if dmax is not None else None
+        if fallback_min_c is None and fallback_max_c is None:
             g = hr.get("gross_charge")
             gc = _dollars_to_cents(g) if g is not None else None
-            min_c = max_c = gc or 0
-        elif min_c is None:
-            min_c = max_c or 0
-        elif max_c is None:
-            max_c = min_c
+            fallback_min_c = fallback_max_c = gc or 0
+        elif fallback_min_c is None:
+            fallback_min_c = fallback_max_c or 0
+        elif fallback_max_c is None:
+            fallback_max_c = fallback_min_c
+
+        payer_bands: list[tuple[str, int, int]] = []
+        for field_name, payer_key in _AZ_PAYER_RATE_FIELDS:
+            raw = hr.get(field_name)
+            c = _dollars_to_cents(raw) if raw is not None else None
+            if c is None or c <= 0:
+                continue
+            payer_bands.append((payer_key, c, c))
+
+        if not payer_bands:
+            payer_bands.append(
+                ("BCBS_MA", int(fallback_min_c), int(fallback_max_c or fallback_min_c)),
+            )
 
         for npi in npis:
-            filter_key = {
-                "provider_id": npi,
-                "bundle_id": bundle_id,
-                "source": "az_mvp",
-                "effective_date": effective_date,
-            }
-            doc: dict[str, Any] = {
-                **filter_key,
-                "min_rate_cents": min_c,
-                "max_rate_cents": max_c,
-                "payer": "BCBS_MA",
-                "confidence": 0.88,
-                "mvp_hospital_id": hospital_id,
-            }
-            col.replace_one(filter_key, doc, upsert=True)
-            count += 1
+            for payer_key, min_c, max_c in payer_bands:
+                filter_key = {
+                    "provider_id": npi,
+                    "bundle_id": bundle_id,
+                    "payer": payer_key,
+                    "source": "az_mvp",
+                    "effective_date": effective_date,
+                }
+                doc: dict[str, Any] = {
+                    **filter_key,
+                    "min_rate_cents": min_c,
+                    "max_rate_cents": max_c,
+                    "confidence": 0.88,
+                    "mvp_hospital_id": hospital_id,
+                }
+                col.replace_one(filter_key, doc, upsert=True)
+                count += 1
+
     return count
 
 
@@ -384,6 +416,6 @@ def import_sample_directory(db: Database, directory: Path) -> dict[str, int]:
 def ensure_indexes(db: Database) -> None:
     db["providers"].create_index([("location", "2dsphere")])
     db["providers"].create_index([("zip", 1), ("specialties", 1)])
-    db["prices"].create_index([("provider_id", 1), ("bundle_id", 1)])
+    db["prices"].create_index([("provider_id", 1), ("bundle_id", 1), ("payer", 1)])
     db["procedures"].create_index([("bundle_id", 1)])
     db["hospital_rates"].create_index([("hospital_id", 1), ("cpt", 1)])

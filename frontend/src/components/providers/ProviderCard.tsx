@@ -5,12 +5,21 @@ import type { Provider, CostEstimate } from '@/types';
 interface ProviderCardProps {
   provider: Provider;
   estimate?: CostEstimate;
+  /** Shown above your-plan pricing (e.g. carrier from onboarding). */
+  insuranceLabel?: string;
   onSave?: () => void;
   saved?: boolean;
   compact?: boolean;
 }
 
-const ProviderCard = ({ provider, estimate, onSave, saved = false, compact = false }: ProviderCardProps) => (
+const ProviderCard = ({
+  provider,
+  estimate,
+  insuranceLabel = 'Your plan',
+  onSave,
+  saved = false,
+  compact = false,
+}: ProviderCardProps) => (
   <div className="bg-card rounded-2xl border border-border shadow-card p-5 animate-fade-in">
     <div className="flex items-start justify-between mb-3">
       <div>
@@ -43,32 +52,61 @@ const ProviderCard = ({ provider, estimate, onSave, saved = false, compact = fal
     )}
 
     {estimate && !compact && (
-      <div className="bg-muted rounded-xl p-4 mb-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Cost Estimate</p>
-        {estimate.procedureName && <p className="text-sm font-medium mb-2">{estimate.procedureName}</p>}
-        <div className="space-y-1 text-sm">
-          {estimate.deductibleApplied !== undefined && (
-            <div className="flex justify-between"><span className="text-muted-foreground">Deductible applied</span><span>${estimate.deductibleApplied}</span></div>
-          )}
-          {estimate.copay !== undefined && (
-            <div className="flex justify-between"><span className="text-muted-foreground">Copay</span><span>${estimate.copay}</span></div>
-          )}
-          {estimate.coinsurance !== undefined && (
-            <div className="flex justify-between"><span className="text-muted-foreground">Coinsurance</span><span>${estimate.coinsurance}</span></div>
-          )}
-          <div className="flex justify-between font-semibold pt-1 border-t border-border">
-            <span>Your estimated cost</span>
-            <span className="text-foreground">${estimate.patientResponsibility}</span>
+      <div className="bg-muted rounded-xl p-4 mb-4 space-y-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Your plan</p>
+          <p className="text-xs text-muted-foreground mb-2">{insuranceLabel}</p>
+          {estimate.procedureName && <p className="text-sm font-medium mb-2">{estimate.procedureName}</p>}
+          <div className="space-y-1 text-sm">
+            {estimate.deductibleApplied !== undefined && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Deductible applied</span><span>${estimate.deductibleApplied}</span></div>
+            )}
+            {estimate.copay !== undefined && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Copay</span><span>${estimate.copay}</span></div>
+            )}
+            {estimate.coinsurance !== undefined && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Coinsurance</span><span>${estimate.coinsurance}</span></div>
+            )}
+            <div className="flex justify-between font-semibold pt-1 border-t border-border">
+              <span>Est. cost (your insurance)</span>
+              <span className="text-foreground">
+                {estimate.oopMin !== undefined && estimate.oopMax !== undefined && estimate.oopMin !== estimate.oopMax
+                  ? `$${estimate.oopMin.toLocaleString()}–$${estimate.oopMax.toLocaleString()}`
+                  : `$${(estimate.oopMax ?? estimate.patientResponsibility).toLocaleString()}`}
+              </span>
+            </div>
           </div>
         </div>
-        {estimate.note && <p className="text-xs text-muted-foreground mt-2">{estimate.note}</p>}
+        {estimate.otherInsurersOopMin !== undefined && estimate.otherInsurersOopMax !== undefined && (
+          <div className="pt-2 border-t border-border/80">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Other insurances (est.)</p>
+            <p className="text-sm text-foreground">
+              ${estimate.otherInsurersOopMin.toLocaleString()} – ${estimate.otherInsurersOopMax.toLocaleString()}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Range across other payer rates in our data (not your plan).</p>
+          </div>
+        )}
+        {estimate.note && <p className="text-xs text-muted-foreground pt-1">{estimate.note}</p>}
       </div>
     )}
 
     {estimate && compact && (
-      <p className="text-sm font-medium mb-3">
-        Est. <span className="text-foreground">${estimate.patientResponsibility}</span>
-      </p>
+      <div className="mb-3 space-y-1">
+        <p className="text-sm font-medium">
+          <span className="text-muted-foreground font-normal text-xs block">{insuranceLabel}</span>
+          Est.{' '}
+          <span className="text-foreground">
+            {estimate.oopMin !== undefined && estimate.oopMax !== undefined && estimate.oopMin !== estimate.oopMax
+              ? `$${estimate.oopMin.toLocaleString()}–$${estimate.oopMax.toLocaleString()}`
+              : `$${(estimate.oopMax ?? estimate.patientResponsibility).toLocaleString()}`}
+          </span>
+        </p>
+        {estimate.otherInsurersOopMin !== undefined && estimate.otherInsurersOopMax !== undefined && (
+          <p className="text-xs text-muted-foreground">
+            Others: ${estimate.otherInsurersOopMin.toLocaleString()}–${estimate.otherInsurersOopMax.toLocaleString()}
+          </p>
+        )}
+      </div>
     )}
 
     <div className="flex gap-2">
