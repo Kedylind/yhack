@@ -37,11 +37,6 @@ const STATS: { value: string; headline: string; text: string }[] = [
     text: 'That share has grown several times over since 2009. High deductibles are now normal, so knowing the price before you schedule care is not optional for household budgets.',
   },
   {
-    value: '40.3%',
-    headline: 'Provider listings in insurer directories with a critical error',
-    text: 'In follow-up research on directory accuracy, this share had wrong contact info, wrong specialty, or was wrongly shown as in-network. Bad directories break shopping before price even enters the conversation.',
-  },
-  {
     value: '73%',
     headline: 'Share of commercial health spending on care that could be shoppable',
     text: 'Researchers classify this slice as non-emergency care where timing allows comparing providers or sites. The theoretical room to compare is large even when the tools are not.',
