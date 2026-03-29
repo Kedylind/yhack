@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -19,20 +19,23 @@ import { useAuth } from '@/context/AuthContext';
 interface ProcedureGateDialogProps {
   open: boolean;
   onComplete: (sel: { cpt: string; label: string; bundleId: string }) => void;
+  onDismiss: () => void;
 }
 
 /**
  * Map entry gate: specialty (Gastro vs Dermatology coming soon) → symptom + AI GI wizard → CPT/bundle for estimates.
  */
-const ProcedureGateDialog = ({ open, onComplete }: ProcedureGateDialogProps) => {
+const ProcedureGateDialog = ({ open, onComplete, onDismiss }: ProcedureGateDialogProps) => {
   const { user } = useAuth();
   const [step, setStep] = useState<1 | 2>(1);
   const [specialty, setSpecialty] = useState('');
   const [procedureSelection, setProcedureSelection] = useState<GiProcedureSelection | null>(null);
   const [symptomNotes, setSymptomNotes] = useState('');
+  const didCompleteRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
+    didCompleteRef.current = false;
     const c = loadGiContinuity(user?.email);
     const hasText = (c?.symptomNotes?.trim().length ?? 0) > 0;
     if (c?.procedure || hasText) {
@@ -62,17 +65,20 @@ const ProcedureGateDialog = ({ open, onComplete }: ProcedureGateDialogProps) => 
   const handleProcedureChange = (v: GiProcedureSelection | null) => {
     setProcedureSelection(v);
     if (v != null && isGastroProcedureComplete(v)) {
+      didCompleteRef.current = true;
       onComplete({ cpt: v.cptCode, label: v.title, bundleId: v.bundleId });
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
+    <Dialog
+      open={open}
+      onOpenChange={nextOpen => {
+        if (!nextOpen && !didCompleteRef.current) onDismiss();
+      }}
+    >
       <DialogContent
         className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0"
-        onInteractOutside={e => e.preventDefault()}
-        onEscapeKeyDown={e => e.preventDefault()}
-        hideClose
       >
         <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
           <DialogHeader>

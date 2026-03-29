@@ -66,8 +66,10 @@ const MapPage = () => {
     insurance?.carrier ||
     'Your plan';
 
-  // --- CRT selection state ---
+  // --- CRT selection / AI gate state ---
   const [selectedCrt, setSelectedCrt] = useState<{ cpt: string; label: string; bundleId: string } | null>(null);
+  const [hasCompletedGate, setHasCompletedGate] = useState(false);
+  const [showGate, setShowGate] = useState(false);
 
   const giLeafOptions = useMemo(() => getGiLeafSelectOptions(), []);
 
@@ -83,8 +85,17 @@ const MapPage = () => {
         label: typeof label === 'string' && label ? label : 'Selected procedure',
         bundleId,
       });
+      setHasCompletedGate(true);
+      setShowGate(false);
     }
   }, [intakePayload, selectedCrt]);
+
+  // Open the AI gate by default when no procedure has been picked yet
+  useEffect(() => {
+    if (!selectedCrt && !hasCompletedGate) {
+      setShowGate(true);
+    }
+  }, [selectedCrt, hasCompletedGate]);
 
   useEffect(() => {
     if (!selectedCrt) return;
@@ -127,7 +138,7 @@ const MapPage = () => {
   const hospitalsQuery = useQuery({
     queryKey: ['hospitals', selectedCrt?.cpt],
     queryFn: () => fetchHospitals(selectedCrt!.cpt),
-    enabled: selectedCrt !== null,
+    enabled: selectedCrt !== null && hasCompletedGate,
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: 'always' as const,
@@ -155,7 +166,7 @@ const MapPage = () => {
       const scenario_id = typeof intake.scenario_id === 'string' && intake.scenario_id ? intake.scenario_id : bundle_id;
       return postEstimate({ intake, bundle_id, scenario_id });
     },
-    enabled: selectedCrt !== null,
+    enabled: selectedCrt !== null && hasCompletedGate,
   });
 
   const estimatesLackRates = useMemo(() => {
@@ -212,7 +223,8 @@ const MapPage = () => {
   const toggleHospital = (name: string) => {
     setCollapsedHospitals(s => {
       const next = new Set(s);
-      next.has(name) ? next.delete(name) : next.add(name);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
       return next;
     });
   };
@@ -282,7 +294,8 @@ const MapPage = () => {
   const toggleSave = (id: string) => {
     setSavedIds(s => {
       const next = new Set(s);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -298,8 +311,13 @@ const MapPage = () => {
 
       {/* Specialty → symptoms / AI → procedure; skip if onboarding already sent bundle + CPT */}
       <ProcedureGateDialog
-        open={selectedCrt === null}
-        onComplete={sel => setSelectedCrt(sel)}
+        open={showGate}
+        onComplete={sel => {
+          setSelectedCrt(sel);
+          setHasCompletedGate(true);
+          setShowGate(false);
+        }}
+        onDismiss={() => setShowGate(false)}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
@@ -313,6 +331,18 @@ const MapPage = () => {
           )}
         >
           <div ref={mapContainerRef} className="absolute inset-0 z-0" />
+
+          {/* Re-enter AI questionnaire */}
+          <div className="absolute left-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[1000]">
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-card/95 backdrop-blur shadow-card min-h-9 px-3 text-xs"
+              onClick={() => setShowGate(true)}
+            >
+              AI procedure helper
+            </Button>
+          </div>
 
           <div className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 z-[1000] lg:hidden">
             <Button
@@ -396,7 +426,10 @@ const MapPage = () => {
                 value={selectedCrt?.bundleId ?? ''}
                 onValueChange={bundleId => {
                   const opt = giLeafOptions.find(o => o.bundleId === bundleId);
-                  if (opt) setSelectedCrt({ cpt: opt.cptCode, label: opt.title, bundleId: opt.bundleId });
+                  if (opt) {
+                    setSelectedCrt({ cpt: opt.cptCode, label: opt.title, bundleId: opt.bundleId });
+                    setHasCompletedGate(true);
+                  }
                 }}
               >
                 <SelectTrigger className="w-full text-sm">

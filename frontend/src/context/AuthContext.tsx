@@ -15,6 +15,7 @@ interface AuthState {
   user: { email: string } | null;
   profile: UserProfile | null;
   insurance: InsuranceProfile | null;
+  meLoaded: boolean;
   onboardingComplete: boolean;
   /** Normalized intake payload for /api/estimate (demo; client-only). */
   intakePayload: Record<string, unknown> | null;
@@ -44,12 +45,13 @@ const initialState: AuthState = {
   user: null,
   profile: null,
   insurance: null,
+  meLoaded: false,
   onboardingComplete: false,
   intakePayload: null,
 };
 
 function LegacyAuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>(initialState);
+  const [state, setState] = useState<AuthState>({ ...initialState, meLoaded: true });
 
   const login = useCallback(async (email: string, _password: string) => {
     setState(s => ({ ...s, isAuthenticated: true, user: { email } }));
@@ -111,7 +113,7 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    setState(s => ({ ...s, isAuthenticated }));
+    setState(s => ({ ...s, isAuthenticated, meLoaded: false }));
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -146,6 +148,8 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
         }));
       } catch {
         /* offline or API not configured */
+      } finally {
+        if (!cancelled) setState(s => ({ ...s, meLoaded: true }));
       }
     })();
     return () => {
