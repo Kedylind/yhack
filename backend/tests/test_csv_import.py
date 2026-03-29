@@ -50,9 +50,9 @@ def test_ensure_indexes_does_not_raise(db):
 
 def test_import_az_mvp_providers_and_hospital_rates(db):
     counts = import_az_directory(db, AZ_DATA, price_hospital_id="bmc")
-    assert counts.get("providers", 0) > 0
-    assert counts.get("hospital_rates", 0) > 0
-    assert counts.get("prices", 0) > 0
+    assert counts.get("providers_gi", 0) > 0
+    assert counts.get("hospital_rates_gi", 0) > 0
+    assert counts.get("prices_gi", 0) > 0
 
     p = db["providers"].find_one({"source": "az_mvp"})
     assert p is not None
