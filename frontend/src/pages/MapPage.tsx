@@ -216,7 +216,9 @@ const MapPage = () => {
   // Collapse ALL hospitals by default when data loads
   useEffect(() => {
     if (hospitals.length > 0) {
-      setCollapsedHospitals(new Set(hospitals.map(h => h.name)));
+      const all = new Set(hospitals.map(h => h.name));
+      all.add('Independent Providers');
+      setCollapsedHospitals(all);
     }
   }, [hospitals]);
 
