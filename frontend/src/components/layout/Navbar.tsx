@@ -14,7 +14,10 @@ const Navbar = () => {
           <CareCostLogo showTagline={!isAuthenticated} compact={isAuthenticated} />
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link to="/why-it-matters">
+            <Button variant="ghost" size="sm">Why it matters</Button>
+          </Link>
           {isAuthenticated ? (
             <>
               <Link to="/map">
