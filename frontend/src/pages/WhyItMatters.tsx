@@ -19,7 +19,7 @@ const STATS: { value: string; headline: string; text: string }[] = [
   {
     value: '$17B+',
     headline: 'Annual bad debt from unpaid patient bills at U.S. hospitals and providers',
-    text: 'Recent national industry analyses that track payments across large samples of hospitals and physicians have put annual bad debt from unpaid patient balances in the ballpark of tens of billions of dollars. When people cannot see or plan for what they will owe before care, more of that balance turns into write-offs. Price transparency is not the only lever, but clearer, earlier numbers can reduce sticker shock and unpaid balances, which would help bring even that total down over time.',
+    text: 'National industry data put annual bad debt from unpaid patient bills in the tens of billions. Opaque pricing feeds surprise balances and write-offs. Clearer costs before care will not fix everything, but it can reduce unpaid balances and the bad debt hospitals absorb.',
   },
   {
     value: '36.3%',
