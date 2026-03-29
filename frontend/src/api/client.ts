@@ -73,6 +73,29 @@ export async function postEstimate(body: {
   });
 }
 
+export type HospitalApi = {
+  name: string;
+  hospital_id: string | null;
+  lat: number;
+  lng: number;
+  doctor_count: number;
+  bcbs_price: number | null;
+  aetna_price: number | null;
+  harvard_pilgrim_price: number | null;
+  uhc_price: number | null;
+  de_identified_min: number | null;
+  de_identified_max: number | null;
+  gross_charge: number | null;
+  discounted_cash: number | null;
+  cpt: string;
+  cpt_desc: string;
+};
+
+export async function fetchHospitals(cpt?: string): Promise<HospitalApi[]> {
+  const q = cpt ? `?cpt=${cpt}` : '';
+  return json<HospitalApi[]>(`/api/hospitals${q}`);
+}
+
 export async function postIntake(intake: Record<string, unknown>): Promise<{ normalized: Record<string, unknown>; missing_required: string[] }> {
   return json('/api/intake', { method: 'POST', body: JSON.stringify(intake) });
 }

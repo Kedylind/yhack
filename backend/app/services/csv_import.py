@@ -18,6 +18,7 @@ BUNDLE_CPT_AZ_MVP: dict[str, str] = {
     "egd_with_biopsy": "43235",
     "egd_bleeding": "43255",
     "egd_dilation": "43249",
+    "egd_band_ligation": "43244",
     "gi_imaging_ct": "74176",
     "capsule_endoscopy": "91110",
     "gi_general": "45378",

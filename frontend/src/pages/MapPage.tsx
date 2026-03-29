@@ -5,16 +5,17 @@ import 'leaflet/dist/leaflet.css';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import ProviderCard from '@/components/providers/ProviderCard';
-import Chip from '@/components/Chip';
+import CrtSelectionDialog, { EGD_PROCEDURES } from '@/components/CrtSelectionDialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, List, MapPin, Building2, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search, List, MapPin, Building2, ChevronDown, ChevronRight, RefreshCw, Info } from 'lucide-react';
 import type { Provider } from '@/types';
 import { useAuth } from '@/context/AuthContext';
-import { fetchProviders, postEstimate, type ProviderApi } from '@/api/client';
-import { apiEstimateToCostEstimate, formatPinPrice } from '@/lib/mapEstimate';
-
-const SPECIALTIES = ['All', 'Gastroenterology'];
+import { fetchProviders, fetchHospitals, postEstimate, type ProviderApi, type HospitalApi } from '@/api/client';
+import { apiEstimateToCostEstimate } from '@/lib/mapEstimate';
+import { getPayerPrice, computeYourPlanEstimate, carrierKeyFromLabel } from '@/lib/payerPrice';
 
 function toProvider(p: ProviderApi): Provider {
   return {
@@ -44,35 +45,71 @@ const createPricePinIcon = (priceLabel: string) => {
   });
 };
 
+/** Payer key → human label for display. */
+function payerDisplayLabel(carrier: string): string {
+  const key = carrierKeyFromLabel(carrier);
+  const labels: Record<string, string> = {
+    bcbs: 'BCBS',
+    aetna: 'Aetna',
+    harvard_pilgrim: 'Harvard Pilgrim',
+    uhc: 'UHC',
+  };
+  return labels[key] ?? 'BCBS';
+}
+
 const MapPage = () => {
   const { intakePayload, insurance } = useAuth();
   const insuranceCarrierLabel =
     (typeof intakePayload?.insurance_carrier === 'string' && intakePayload.insurance_carrier) ||
     insurance?.carrier ||
     'Your plan';
-  const [selectedSpecialty, setSelectedSpecialty] = useState('All');
+
+  // --- CRT selection state ---
+  const [selectedCrt, setSelectedCrt] = useState<{ cpt: string; label: string; bundleId: string } | null>(null);
+
+  // Pre-populate from onboarding if user already selected a procedure
+  useEffect(() => {
+    if (selectedCrt) return;
+    if (typeof intakePayload?.cpt_code === 'string' && intakePayload.cpt_code) {
+      const match = EGD_PROCEDURES.find(p => p.cpt === intakePayload.cpt_code);
+      if (match) {
+        setSelectedCrt({ cpt: match.cpt, label: match.label, bundleId: match.bundleId });
+      }
+    }
+  }, [intakePayload, selectedCrt]);
+
+  // --- Filter / search state ---
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [showList, setShowList] = useState(false);
   const [collapsedHospitals, setCollapsedHospitals] = useState<Set<string>>(new Set());
+  const [scrollToHospital, setScrollToHospital] = useState<string | null>(null);
+  const hospitalRefsMap = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
 
   const providersQuery = useQuery({
-    queryKey: ['providers', selectedSpecialty],
-    queryFn: () =>
-      fetchProviders({
-        specialty: selectedSpecialty === 'All' ? undefined : selectedSpecialty,
-      }),
-    /** After Mongo re-seed, old data must not stick while you stay on /map */
+    queryKey: ['providers'],
+    queryFn: () => fetchProviders({ specialty: 'Gastroenterology' }),
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
   });
+
+  const hospitalsQuery = useQuery({
+    queryKey: ['hospitals', selectedCrt?.cpt],
+    queryFn: () => fetchHospitals(selectedCrt!.cpt),
+    enabled: selectedCrt !== null,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always' as const,
+  });
+
+  const hospitals = useMemo(() => hospitalsQuery.data ?? [], [hospitalsQuery.data]);
 
   const providers = useMemo(
     () => (providersQuery.data ?? []).map(toProvider),
@@ -80,33 +117,22 @@ const MapPage = () => {
   );
 
   const estimateQuery = useQuery({
-    queryKey: ['estimate', intakePayload],
+    queryKey: ['estimate', intakePayload, selectedCrt?.bundleId],
     queryFn: () => {
       const fallback = {
         zip: '02118',
         insurance_carrier: 'Blue Cross Blue Shield of Massachusetts',
         care_focus: 'Gastroenterology',
-        scenario_id: 'colonoscopy_screening',
-        bundle_id: 'colonoscopy_screening',
+        scenario_id: selectedCrt?.bundleId ?? 'colonoscopy_screening',
+        bundle_id: selectedCrt?.bundleId ?? 'colonoscopy_screening',
       };
       const intake = { ...fallback, ...(intakePayload ?? {}) };
-      const bundle_id =
-        typeof intake.bundle_id === 'string' && intake.bundle_id
-          ? intake.bundle_id
-          : 'colonoscopy_screening';
-      const scenario_id =
-        typeof intake.scenario_id === 'string' && intake.scenario_id ? intake.scenario_id : bundle_id;
+      const bundle_id = selectedCrt?.bundleId ?? (typeof intake.bundle_id === 'string' && intake.bundle_id ? intake.bundle_id : 'colonoscopy_screening');
+      const scenario_id = typeof intake.scenario_id === 'string' && intake.scenario_id ? intake.scenario_id : bundle_id;
       return postEstimate({ intake, bundle_id, scenario_id });
     },
-    enabled: true,
+    enabled: selectedCrt !== null,
   });
-
-  const procedureSummary =
-    typeof intakePayload?.procedure_label === 'string'
-      ? intakePayload.procedure_label
-      : typeof intakePayload?.cpt_code === 'string'
-        ? `CPT ${intakePayload.cpt_code}`
-        : null;
 
   const estimatesLackRates = useMemo(() => {
     const rows = estimateQuery.data?.estimates ?? [];
@@ -125,12 +151,10 @@ const MapPage = () => {
 
   const filtered = useMemo(() => {
     return providers.filter(p => {
-      const matchSpec =
-        selectedSpecialty === 'All' || p.specialty.some(s => s.includes(selectedSpecialty));
       const matchSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchSpec && matchSearch;
+      return matchSearch;
     });
-  }, [providers, selectedSpecialty, searchQuery]);
+  }, [providers, searchQuery]);
 
   const groupedByHospital = useMemo(() => {
     const groups = new Map<string, Provider[]>();
@@ -143,6 +167,24 @@ const MapPage = () => {
     return Array.from(groups.entries()).sort((a, b) => b[1].length - a[1].length);
   }, [filtered]);
 
+  // Collapse ALL hospitals by default when data loads
+  useEffect(() => {
+    if (hospitals.length > 0) {
+      setCollapsedHospitals(new Set(hospitals.map(h => h.name)));
+    }
+  }, [hospitals]);
+
+  // Scroll to hospital after pin click (fires after DOM commit)
+  useEffect(() => {
+    if (!scrollToHospital) return;
+    requestAnimationFrame(() => {
+      hospitalRefsMap.current.get(scrollToHospital)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setScrollToHospital(null);
+    });
+  }, [scrollToHospital, collapsedHospitals]);
+
+  const hasFullPlanData = insurance?.deductible != null && insurance?.coinsurance != null;
+
   const toggleHospital = (name: string) => {
     setCollapsedHospitals(s => {
       const next = new Set(s);
@@ -152,41 +194,66 @@ const MapPage = () => {
   };
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    if (!mapContainerRef.current) return;
+    const container = mapContainerRef.current;
 
-    const map = L.map(mapContainerRef.current).setView([42.3601, -71.0589], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/">OSM</a>',
-    }).addTo(map);
-
-    markersRef.current = L.layerGroup().addTo(map);
-    mapRef.current = map;
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current || container.clientHeight < 100 || container.clientWidth < 100) return;
+      const map = L.map(container, { zoomAnimation: false, fadeAnimation: false })
+        .setView([42.3601, -71.0589], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/">OSM</a>',
+      }).addTo(map);
+      markersRef.current = L.layerGroup().addTo(map);
+      mapRef.current = map;
+    });
+    ro.observe(container);
 
     return () => {
-      map.remove();
-      mapRef.current = null;
+      ro.disconnect();
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
   }, []);
 
+  // Payer-aware map markers
   useEffect(() => {
-    if (!markersRef.current) return;
+    if (!markersRef.current || !mapRef.current) return;
     markersRef.current.clearLayers();
 
-    filtered.forEach(p => {
-      const est = estimateById.get(String(p.id));
-      const priceLabel = est ? formatPinPrice(est) : '—';
+    const payerLabel = payerDisplayLabel(insuranceCarrierLabel);
+
+    hospitals.forEach(h => {
+      const payerPrice = getPayerPrice(h, insuranceCarrierLabel);
+      const priceLabel = payerPrice != null ? `$${Math.round(payerPrice).toLocaleString()}` : '—';
       const icon = createPricePinIcon(priceLabel);
-      const marker = L.marker([p.lat, p.lng], { icon })
+
+      const rangeText = h.de_identified_min != null && h.de_identified_max != null
+        ? `<br/><span style="font-size:11px;color:#666;">Range: $${Math.round(h.de_identified_min).toLocaleString()} – $${Math.round(h.de_identified_max).toLocaleString()}</span>`
+        : '<br/><span style="font-size:11px;color:#999;font-style:italic;">Price range was not disclosed</span>';
+
+      const marker = L.marker([h.lat, h.lng], { icon })
         .bindPopup(
-          `<strong>${p.name}</strong><br/><span style="font-size:12px">${p.specialty.join(', ')}</span>` +
-            (est
-              ? `<br/><span style="font-size:12px;margin-top:4px;display:inline-block;font-weight:600;color:hsl(345,42%,45%);">Est. OOP: ${priceLabel}</span>`
-              : ''),
+          `<strong>${h.name}</strong><br/>` +
+          `<span style="font-size:12px">${h.doctor_count} GI doctors</span>` +
+          (payerPrice != null ? `<br/><span style="font-size:12px;font-weight:600;color:hsl(345,42%,45%);">${payerLabel}: ${priceLabel}</span>` : '') +
+          rangeText,
         )
-        .on('click', () => setSelectedProvider(p));
+        .on('click', () => {
+          // Collapse all, expand only this one, scroll to it
+          setCollapsedHospitals(() => {
+            const allCollapsed = new Set(hospitals.map(x => x.name));
+            allCollapsed.delete(h.name);
+            return allCollapsed;
+          });
+          setSelectedProvider(null);
+          setScrollToHospital(h.name);
+        });
       markersRef.current!.addLayer(marker);
     });
-  }, [filtered, estimateById]);
+  }, [hospitals, insuranceCarrierLabel]);
 
   const toggleSave = (id: string) => {
     setSavedIds(s => {
@@ -196,11 +263,18 @@ const MapPage = () => {
     });
   };
 
-  const loadError = providersQuery.isError || estimateQuery.isError;
+  const loadError = providersQuery.isError || estimateQuery.isError || hospitalsQuery.isError;
+  const payerLabel = payerDisplayLabel(insuranceCarrierLabel);
 
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
+
+      {/* CRT Selection Popup — must select before seeing prices */}
+      <CrtSelectionDialog
+        open={selectedCrt === null}
+        onSelect={(cpt, label, bundleId) => setSelectedCrt({ cpt, label, bundleId })}
+      />
 
       <div className="flex-1 flex flex-col lg:flex-row">
         <div className="flex-1 relative min-h-[400px] lg:min-h-0">
@@ -232,13 +306,11 @@ const MapPage = () => {
                 <code className="text-xs">127.0.0.1:8000</code>.
               </p>
             )}
-            {procedureSummary && (
+            {selectedCrt && (
               <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-primary">Estimates for</p>
-                <p className="font-medium text-foreground leading-snug">{procedureSummary}</p>
-                {typeof intakePayload?.cpt_code === 'string' && (
-                  <p className="text-xs text-muted-foreground mt-0.5 font-mono">CPT {intakePayload.cpt_code}</p>
-                )}
+                <p className="font-medium text-foreground leading-snug">{selectedCrt.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 font-mono">CPT {selectedCrt.cpt}</p>
               </div>
             )}
             {estimatesLackRates && (
@@ -249,37 +321,56 @@ const MapPage = () => {
                 (same Mongo as the API), then refresh.
               </p>
             )}
-            <div className="flex items-center justify-between gap-2">
-              {providersQuery.isLoading && <p className="text-sm text-muted-foreground">Loading providers…</p>}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search providers…"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="ml-auto shrink-0"
+                className="shrink-0"
                 disabled={providersQuery.isFetching}
                 onClick={() => {
                   void providersQuery.refetch();
                   void estimateQuery.refetch();
+                  void hospitalsQuery.refetch();
                 }}
                 title="Reload providers from the API (use after re-seeding MongoDB)"
               >
-                <RefreshCw className={`w-4 h-4 mr-1.5 ${providersQuery.isFetching ? 'animate-spin' : ''}`} />
-                Refresh
+                <RefreshCw className={`w-4 h-4 ${providersQuery.isFetching ? 'animate-spin' : ''}`} />
               </Button>
             </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search providers…"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {SPECIALTIES.map(s => (
-                <Chip key={s} label={s} active={selectedSpecialty === s} onClick={() => setSelectedSpecialty(s)} />
-              ))}
+
+            {/* CRT procedure filter */}
+            <div className="flex items-center gap-2">
+              <Select
+                value={selectedCrt?.cpt ?? ''}
+                onValueChange={(val) => {
+                  const proc = EGD_PROCEDURES.find(p => p.cpt === val);
+                  if (proc) setSelectedCrt({ cpt: proc.cpt, label: proc.label, bundleId: proc.bundleId });
+                }}
+              >
+                <SelectTrigger className="w-full text-sm">
+                  <SelectValue placeholder="Select procedure" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Gastroenterology</SelectLabel>
+                    {EGD_PROCEDURES.filter((p, i, arr) => arr.findIndex(x => x.cpt === p.cpt) === i).map(p => (
+                      <SelectItem key={p.cpt} value={p.cpt}>
+                        {p.label} (CPT {p.cpt})
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -293,6 +384,7 @@ const MapPage = () => {
                   provider={selectedProvider}
                   estimate={estimateById.get(String(selectedProvider.id))}
                   insuranceLabel={insuranceCarrierLabel}
+                  hasFullPlanData={hasFullPlanData}
                   onSave={() => toggleSave(selectedProvider.id)}
                   saved={savedIds.has(selectedProvider.id)}
                 />
@@ -300,8 +392,17 @@ const MapPage = () => {
             ) : groupedByHospital.length > 0 ? (
               groupedByHospital.map(([hospitalName, hospitalProviders]) => {
                 const isCollapsed = collapsedHospitals.has(hospitalName);
+                const hData = hospitals.find(h => h.name === hospitalName);
+                const hospitalPayerPrice = hData ? getPayerPrice(hData, insuranceCarrierLabel) : null;
+                const yourPlanEst = hospitalPayerPrice != null && hasFullPlanData
+                  ? computeYourPlanEstimate(hospitalPayerPrice, insurance!.deductible, insurance!.coinsurance!)
+                  : null;
                 return (
-                  <div key={hospitalName} className="mb-2">
+                  <div
+                    key={hospitalName}
+                    className="mb-2"
+                    ref={el => { if (el) hospitalRefsMap.current.set(hospitalName, el); else hospitalRefsMap.current.delete(hospitalName); }}
+                  >
                     <button
                       type="button"
                       onClick={() => toggleHospital(hospitalName)}
@@ -309,17 +410,69 @@ const MapPage = () => {
                     >
                       {isCollapsed ? <ChevronRight className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
                       <Building2 className="w-4 h-4 shrink-0 text-primary" />
-                      <span className="font-semibold text-sm flex-1 truncate">{hospitalName}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-semibold text-sm truncate block">{hospitalName}</span>
+                        {hospitalPayerPrice != null ? (
+                          <span className="text-xs text-muted-foreground">{payerLabel} ${Math.round(hospitalPayerPrice).toLocaleString()}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">Price not disclosed</span>
+                        )}
+                        {yourPlanEst != null ? (
+                          <span className="text-xs text-primary ml-2">
+                            Your est. ${yourPlanEst.toLocaleString()}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-3 h-3 inline ml-0.5 -mt-0.5" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                <p>Estimated as ({payerLabel} rate − your ${insurance!.deductible.toLocaleString()} deductible) × {insurance!.coinsurance}% coinsurance</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                        ) : hospitalPayerPrice != null && !hasFullPlanData ? (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            ${Math.round(hospitalPayerPrice).toLocaleString()}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-3 h-3 inline ml-0.5 -mt-0.5" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                <p>This is the {payerLabel} negotiated rate. Enter your deductible and coinsurance for a personalized estimate.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                        ) : null}
+                      </div>
                       <span className="text-xs text-muted-foreground">{hospitalProviders.length}</span>
                     </button>
                     {!isCollapsed && (
                       <div className="mt-2 space-y-2 pl-2">
+                        {/* Price range with info tooltip */}
+                        {hData?.de_identified_min != null && hData?.de_identified_max != null ? (
+                          <div className="bg-primary/5 border border-primary/15 rounded-lg px-3 py-2 text-xs flex items-center gap-1">
+                            <span className="font-semibold">Price range:</span>{' '}
+                            ${Math.round(hData.de_identified_min).toLocaleString()} – ${Math.round(hData.de_identified_max).toLocaleString()}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-3.5 h-3.5 text-muted-foreground shrink-0 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                <p>De-identified minimum and maximum negotiated rate across all payers at this hospital, as required by federal price transparency rules.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        ) : (
+                          <div className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground italic">
+                            Price range was not disclosed by this facility
+                          </div>
+                        )}
                         {hospitalProviders.map(p => (
                           <div key={p.id} onClick={() => setSelectedProvider(p)} className="cursor-pointer">
                             <ProviderCard
                               provider={p}
                               estimate={estimateById.get(String(p.id))}
                               insuranceLabel={insuranceCarrierLabel}
+                              hasFullPlanData={hasFullPlanData}
                               onSave={() => toggleSave(p.id)}
                               saved={savedIds.has(p.id)}
                               compact
