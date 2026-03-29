@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Railway uses npm + package-lock.json; do not commit Bun lockfiles
+bun.lock
+bun.lockb
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
