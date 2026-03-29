@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 
 /**
- * Figures from public and industry research on U.S. medical debt, cost-related care delays,
- * plan design, directory accuracy, and consumer price-shopping behavior.
+ * Figures from public and industry research on U.S. medical debt, hospital bad debt, cost-related care delays,
+ * plan design, and consumer price-shopping behavior.
  * Each card names what is being counted before interpreting it.
  */
 const STATS: { value: string; headline: string; text: string }[] = [
@@ -17,19 +17,19 @@ const STATS: { value: string; headline: string; text: string }[] = [
     text: 'Government and census-based analyses estimate households together owe at least this much for medical bills. Medical debt is widespread among insured families, not only the uninsured.',
   },
   {
+    value: '$17B+',
+    headline: 'Annual bad debt from unpaid patient bills at U.S. hospitals and providers',
+    text: 'National industry data put annual bad debt from unpaid patient bills in the tens of billions. Opaque pricing feeds surprise balances and write-offs. Clearer costs before care will not fix everything, but it can reduce unpaid balances and the bad debt hospitals absorb.',
+  },
+  {
     value: '36.3%',
     headline: 'Households that report holding medical debt',
     text: 'More than one in three U.S. households carry some amount owed for care. That scale shows billing after the fact is failing as a national way to pay for health.',
   },
   {
-    value: '1 in 6',
-    headline: 'Adults who went without or delayed care in 2024 because of cost',
-    text: 'About 17% of adults skipped or postponed needed visits, drugs, or mental health care solely due to what they feared they would pay. Cost drives real treatment gaps.',
-  },
-  {
-    value: '37% to 40%',
-    headline: 'Insured adults who still skipped or delayed care over out-of-pocket costs',
-    text: 'Even with coverage, a large minority avoided some care in the last year because of deductibles, copays, or uncertainty about what they would owe.',
+    value: '~38%',
+    headline: 'Insured adults skipped or delayed care because of out-of-pocket costs',
+    text: 'Multiple surveys summarized in industry research land around 37% to 40%: roughly four in ten people with insurance still avoided some care in the past year over deductibles, copays, or fear of the bill. That is not “uninsured only.” It is the middle class with a card in their wallet.',
   },
   {
     value: '$1,886',
@@ -42,23 +42,18 @@ const STATS: { value: string; headline: string; text: string }[] = [
     text: 'That share has grown several times over since 2009. High deductibles are now normal, so knowing the price before you schedule care is not optional for household budgets.',
   },
   {
-    value: '40.3%',
-    headline: 'Provider listings in insurer directories with a critical error',
-    text: 'In follow-up research on directory accuracy, this share had wrong contact info, wrong specialty, or was wrongly shown as in-network. Bad directories break shopping before price even enters the conversation.',
-  },
-  {
     value: '73%',
     headline: 'Share of commercial health spending on care that could be shoppable',
     text: 'Researchers classify this slice as non-emergency care where timing allows comparing providers or sites. The theoretical room to compare is large even when the tools are not.',
   },
   {
     value: '89%',
-    headline: 'Consumers who say they would shop for care with the right tools',
+    headline: 'Consumers say they would shop for care with the right tools',
     text: 'Survey data consistently finds strong interest in comparing options when the experience is simple and reliable. Demand for clarity is already there.',
   },
   {
     value: '64%',
-    headline: 'Consumers who say they have never price-shopped for healthcare',
+    headline: 'Consumers say they have never price-shopped for healthcare',
     text: 'In the same line of research, nearly two-thirds report never comparing prices across hospitals or clinicians for a service. People are not asked to shop in a normal way: opaque prices and broken directories come first.',
   },
 ];
