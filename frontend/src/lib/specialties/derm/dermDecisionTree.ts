@@ -165,6 +165,6 @@ export const DERM_PROCEDURE_NODES: Record<string, DermTreeNode> = {
 };
 
 /** All derm leaf procedures for the procedure filter dropdown. */
-export const DERM_PROCEDURES: { cpt: string; label: string; bundleId: string }[] = Object.values(DERM_TREE)
+export const DERM_PROCEDURES: { cpt: string; label: string; bundleId: string }[] = Object.values(DERM_PROCEDURE_NODES)
   .filter((n): n is DermLeafNode => n.kind === 'leaf')
   .map(n => ({ cpt: n.cptCode, label: n.title, bundleId: n.bundleId }));

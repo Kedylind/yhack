@@ -1,4 +1,4 @@
-import rawCsv from '../../data/az-data/hospital_rates_clean.csv?raw';
+import rawCsv from '../../../data/az-data/hospital_rates_clean.csv?raw';
 
 export type InsurerFromRates = {
   /** Slug from column name without `_price`, e.g. `bcbs` */
