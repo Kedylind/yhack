@@ -22,14 +22,9 @@ const STATS: { value: string; headline: string; text: string }[] = [
     text: 'More than one in three U.S. households carry some amount owed for care. That scale shows billing after the fact is failing as a national way to pay for health.',
   },
   {
-    value: '1 in 6',
-    headline: 'Adults who went without or delayed care in 2024 because of cost',
-    text: 'About 17% of adults skipped or postponed needed visits, drugs, or mental health care solely due to what they feared they would pay. Cost drives real treatment gaps.',
-  },
-  {
-    value: '37% to 40%',
-    headline: 'Insured adults who still skipped or delayed care over out-of-pocket costs',
-    text: 'Even with coverage, a large minority avoided some care in the last year because of deductibles, copays, or uncertainty about what they would owe.',
+    value: '~38%',
+    headline: 'Insured adults skipped or delayed care because of out-of-pocket costs',
+    text: 'Multiple surveys summarized in industry research land around 37% to 40%: roughly four in ten people with insurance still avoided some care in the past year over deductibles, copays, or fear of the bill. That is not “uninsured only.” It is the middle class with a card in their wallet.',
   },
   {
     value: '$1,886',
@@ -53,12 +48,12 @@ const STATS: { value: string; headline: string; text: string }[] = [
   },
   {
     value: '89%',
-    headline: 'Consumers who say they would shop for care with the right tools',
+    headline: 'Consumers say they would shop for care with the right tools',
     text: 'Survey data consistently finds strong interest in comparing options when the experience is simple and reliable. Demand for clarity is already there.',
   },
   {
     value: '64%',
-    headline: 'Consumers who say they have never price-shopped for healthcare',
+    headline: 'Consumers say they have never price-shopped for healthcare',
     text: 'In the same line of research, nearly two-thirds report never comparing prices across hospitals or clinicians for a service. People are not asked to shop in a normal way: opaque prices and broken directories come first.',
   },
 ];
