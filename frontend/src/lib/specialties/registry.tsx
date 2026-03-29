@@ -7,6 +7,8 @@
 import type { SpecialtyPlugin } from '@/lib/specialties/types';
 import { buildGastroProcedureIntake, isGastroProcedureComplete } from '@/lib/specialties/gastro/intake';
 import { GastroProcedureStep } from '@/lib/specialties/gastro/GastroProcedureStep';
+import { buildDermProcedureIntake, isDermProcedureComplete } from '@/lib/specialties/derm/intake';
+import { DermProcedureStep } from '@/lib/specialties/derm/DermProcedureStep';
 
 export const SPECIALTY_PLUGINS: readonly SpecialtyPlugin[] = [
   {
@@ -20,6 +22,18 @@ export const SPECIALTY_PLUGINS: readonly SpecialtyPlugin[] = [
     isProcedureComplete: isGastroProcedureComplete,
     buildProcedureIntake: buildGastroProcedureIntake,
     ProcedureStep: GastroProcedureStep,
+  },
+  {
+    id: 'Dermatology',
+    label: 'Dermatology',
+    procedureStep: {
+      title: 'Find your procedure',
+      description:
+        'Answer a few questions about your skin concern. We map your answers to a CPT code for hospital price comparison.',
+    },
+    isProcedureComplete: isDermProcedureComplete,
+    buildProcedureIntake: buildDermProcedureIntake,
+    ProcedureStep: DermProcedureStep,
   },
 ];
 

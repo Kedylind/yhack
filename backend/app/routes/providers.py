@@ -42,13 +42,13 @@ def list_providers(
     hospital: str | None = Query(None),
 ) -> list[ProviderListItem]:
     _ = in_network_only
-    q: dict[str, Any] = {"specialties": "Gastroenterology"}
+    q: dict[str, Any] = {}
+    if specialty and specialty.strip() and specialty.lower() != "all":
+        q["specialties"] = specialty.strip()
     if hospital:
         q["hospital"] = hospital.strip()
     if zip:
         q["zip"] = zip.strip()
-    if specialty and specialty.strip() and specialty.lower() not in ("all", "gastroenterology"):
-        q["specialties"] = specialty.strip()
 
     docs = list(db["providers"].find(q))
 

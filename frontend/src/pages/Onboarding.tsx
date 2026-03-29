@@ -11,9 +11,8 @@ import type { UserProfile, InsuranceProfile } from '@/types';
 import { CheckCircle2 } from 'lucide-react';
 import { postIntake } from '@/api/client';
 import {
-  BCBS_PLAN_OPTIONS,
   INSURERS_FROM_RATES,
-  isBcbsInsurerKey,
+  getPlansForCarrier,
 } from '@/lib/hospitalRatesCsv';
 import { maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
 import {
@@ -45,7 +44,10 @@ const Onboarding = () => {
     () => INSURERS_FROM_RATES.find(i => i.label === insurance.carrier)?.key ?? '',
     [insurance.carrier],
   );
-  const bcbsSelected = isBcbsInsurerKey(selectedInsurerKey);
+  const availablePlans = useMemo(
+    () => getPlansForCarrier(selectedInsurerKey),
+    [selectedInsurerKey],
+  );
 
   const next = () => setStep(s => Math.min(s + 1, 3));
   const back = () => setStep(s => Math.max(s - 1, 0));
@@ -194,18 +196,30 @@ const Onboarding = () => {
             </div>
             <div>
               <Label>Plan name</Label>
-              {bcbsSelected ? (
+              {availablePlans.length > 0 ? (
                 <Select
                   value={insurance.planName || undefined}
-                  onValueChange={v => setInsurance(ins => ({ ...ins, planName: v }))}
+                  onValueChange={v => {
+                    const plan = availablePlans.find(p => p.planName === v);
+                    if (!plan) return;
+                    setInsurance(ins => ({
+                      ...ins,
+                      planName: plan.planName,
+                      planType: plan.planType,
+                      deductible: plan.deductible,
+                      oopMax: plan.oopMax,
+                      coinsurance: plan.coinsurancePct,
+                      copay: plan.copaySpecialist,
+                    }));
+                  }}
                 >
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select a BCBS plan" />
+                    <SelectValue placeholder="Select a plan" />
                   </SelectTrigger>
                   <SelectContent>
-                    {BCBS_PLAN_OPTIONS.map(plan => (
-                      <SelectItem key={plan} value={plan}>
-                        {plan}
+                    {availablePlans.map(plan => (
+                      <SelectItem key={plan.id} value={plan.planName}>
+                        {plan.planName} ({plan.planType})
                       </SelectItem>
                     ))}
                   </SelectContent>

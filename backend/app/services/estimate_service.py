@@ -53,8 +53,9 @@ def build_estimate_response(
     scenario_id = explicit_scenario_id or infer_scenario_id(intake, confirmed)
     bundle_id = explicit_bundle_id or scenario_to_bundle_id(scenario_id)
 
-    # City-wide GI providers for comparison; ZIP is logistics only for v1 demo
-    provider_docs = list(db["providers"].find({"specialties": {"$in": ["Gastroenterology"]}}))
+    # Find providers matching the specialty from intake (defaults to all if unspecified)
+    specialty = merged.get("specialty") or merged.get("care_focus") or "Gastroenterology"
+    provider_docs = list(db["providers"].find({"specialties": {"$in": [specialty]}}))
 
     providers_out = [_provider_to_api_dict(p) for p in provider_docs]
     estimates: list[ProviderEstimate] = []
@@ -67,9 +68,7 @@ def build_estimate_response(
 
     wanted_payer = insurance_carrier_to_payer(merged.get("insurance_carrier"))
 
-    def _oop_tuple(
-        amin: int, amax: int
-    ) -> tuple[int, int, list[str]]:
+    def _oop_tuple(amin: int, amax: int) -> tuple[int, int, list[str]]:
         o_min, o_max, oop_asm = compute_oop_range_cents(
             amin,
             amax,

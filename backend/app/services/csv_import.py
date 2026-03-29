@@ -220,8 +220,13 @@ def import_insurers_csv(db: Database, path: Path) -> int:
     return count
 
 
-def import_az_providers_csv(db: Database, path: Path) -> int:
-    """Load data/az-data/providers.csv into `providers` (NPI physicians, GI demo)."""
+def import_az_providers_csv(
+    db: Database,
+    path: Path,
+    specialty: str = "Gastroenterology",
+    taxonomy: str = "207RG0100X",
+) -> int:
+    """Load providers CSV into `providers` collection, tagged with specialty."""
     rows = _read_csv(path)
     if not rows:
         return 0
@@ -247,9 +252,9 @@ def import_az_providers_csv(db: Database, path: Path) -> int:
             "zip": row["zip"].strip(),
             "state": row.get("state", "").strip(),
             "location": {"type": "Point", "coordinates": [lng, lat]},
-            "taxonomy": "207RG0100X",
+            "taxonomy": taxonomy,
             "phone": row["phone"].strip(),
-            "specialties": ["Gastroenterology"],
+            "specialties": [specialty],
             "source": "az_mvp",
             "hospital": row.get("hospital", "").strip(),
         }
@@ -288,8 +293,26 @@ def import_hospital_rates_csv(db: Database, path: Path) -> int:
             "aetna_price": _parse_float_cell(row.get("aetna_price", "")),
             "aetna_source": row.get("aetna_source", "").strip(),
             "harvard_pilgrim_price": _parse_float_cell(row.get("harvard_pilgrim_price", "")),
+            "hp_plan_name": row.get("hp_plan_name", "").strip(),
+            "hp_source": row.get("hp_source", "").strip(),
             "uhc_price": _parse_float_cell(row.get("uhc_price", "")),
+            "uhc_source": row.get("uhc_source", "").strip(),
             "bcbs_tic_rate": _parse_float_cell(row.get("bcbs_tic_rate", "")),
+            "bcbs_tic_billing_class": row.get("bcbs_tic_billing_class", "").strip(),
+            "billing_class": row.get("billing_class", "unknown").strip(),
+            "setting": row.get("setting", "").strip(),
+            "rate_methodology": row.get("rate_methodology", "").strip(),
+            "turquoise_bundled_price": _parse_float_cell(row.get("turquoise_bundled_price", "")),
+            "turquoise_quality_rating": _parse_float_cell(row.get("turquoise_quality_rating", "")),
+            "masscomparecare_total_paid": _parse_float_cell(
+                row.get("masscomparecare_total_paid", "")
+            ),
+            "fh_physician_in_network": _parse_float_cell(row.get("fh_physician_in_network", "")),
+            "fh_anesthesia_in_network": _parse_float_cell(row.get("fh_anesthesia_in_network", "")),
+            "fh_facility_hosp_in_network": _parse_float_cell(
+                row.get("fh_facility_hosp_in_network", "")
+            ),
+            "fh_pathology_in_network": _parse_float_cell(row.get("fh_pathology_in_network", "")),
             "source": "az_mvp",
         }
         col.replace_one({"_id": doc_id}, doc, upsert=True)
@@ -383,16 +406,32 @@ def import_az_directory(
     *,
     price_hospital_id: str = "bmc",
 ) -> dict[str, int]:
-    """Import data/az-data: providers, hospital_rates, and synthetic per-NPI prices."""
+    """Import data/az-data: providers, hospital_rates, and synthetic per-NPI prices.
+    Also imports derm data if providers_derm.csv and hospital_rates_derm.csv exist."""
     counts: dict[str, int] = {}
+    # GI providers
     p = directory / "providers.csv"
     if p.exists():
-        counts["providers"] = import_az_providers_csv(db, p)
+        counts["providers_gi"] = import_az_providers_csv(db, p)
+    # GI hospital rates
     p = directory / "hospital_rates_clean.csv"
     if p.exists():
-        counts["hospital_rates"] = import_hospital_rates_csv(db, p)
-    if counts.get("providers") and counts.get("hospital_rates"):
-        counts["prices"] = import_az_mvp_prices(db, hospital_id=price_hospital_id)
+        counts["hospital_rates_gi"] = import_hospital_rates_csv(db, p)
+    if counts.get("providers_gi") and counts.get("hospital_rates_gi"):
+        counts["prices_gi"] = import_az_mvp_prices(db, hospital_id=price_hospital_id)
+    # Derm providers
+    p = directory / "providers_derm.csv"
+    if p.exists():
+        counts["providers_derm"] = import_az_providers_csv(
+            db,
+            p,
+            specialty="Dermatology",
+            taxonomy="207N00000X",
+        )
+    # Derm hospital rates
+    p = directory / "hospital_rates_derm.csv"
+    if p.exists():
+        counts["hospital_rates_derm"] = import_hospital_rates_csv(db, p)
     return counts
 
 
