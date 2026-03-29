@@ -15,8 +15,10 @@ import type { Provider } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { fetchProviders, fetchHospitals, postEstimate, type ProviderApi, type HospitalApi } from '@/api/client';
 import { apiEstimateToCostEstimate } from '@/lib/mapEstimate';
-import { getPayerPrice, computeYourPlanEstimate, carrierKeyFromLabel } from '@/lib/payerPrice';
+import { getPayerPrice, computeYourPlanEstimate, carrierKeyFromLabel, getAllPriceSources } from '@/lib/payerPrice';
+import { computeOop } from '@/lib/oopRules';
 import { PLAN_CONFIGS, type PlanConfig } from '@/lib/hospitalRatesCsv';
+import { useNavigate } from 'react-router-dom';
 
 function toProvider(p: ProviderApi): Provider {
   return {
@@ -59,6 +61,7 @@ function payerDisplayLabel(carrier: string): string {
 }
 
 const MapPage = () => {
+  const navigate = useNavigate();
   const { intakePayload, insurance } = useAuth();
   const insuranceCarrierLabel =
     (typeof intakePayload?.insurance_carrier === 'string' && intakePayload.insurance_carrier) ||
@@ -192,8 +195,10 @@ const MapPage = () => {
       list.push(p);
       groups.set(key, list);
     }
-    return Array.from(groups.entries()).sort((a, b) => b[1].length - a[1].length);
-  }, [filtered]);
+    return Array.from(groups.entries())
+      .filter(([name]) => hospitals.some(h => h.name === name))
+      .sort((a, b) => b[1].length - a[1].length);
+  }, [filtered, hospitals]);
 
   // Collapse ALL hospitals by default when data loads
   useEffect(() => {
@@ -326,7 +331,7 @@ const MapPage = () => {
         </div>
 
         <div
-          className={`lg:w-[420px] bg-card border-l border-border overflow-y-auto ${showList ? 'block' : 'hidden lg:block'}`}
+          className={`lg:w-[420px] lg:h-[calc(100vh-4rem)] bg-card border-l border-border overflow-y-auto ${showList ? 'block' : 'hidden lg:block'}`}
         >
           <div className="p-4 border-b border-border space-y-3">
             {loadError && (
@@ -394,6 +399,12 @@ const MapPage = () => {
                 <SelectContent>
                   <SelectGroup>
                     <SelectLabel>Gastroenterology</SelectLabel>
+                    {/* Ensure current selection always visible even if not in EGD_PROCEDURES */}
+                    {selectedCrt && !EGD_PROCEDURES.some(p => p.cpt === selectedCrt.cpt) && (
+                      <SelectItem key={selectedCrt.cpt} value={selectedCrt.cpt}>
+                        {selectedCrt.label} (CPT {selectedCrt.cpt})
+                      </SelectItem>
+                    )}
                     {EGD_PROCEDURES.filter((p, i, arr) => arr.findIndex(x => x.cpt === p.cpt) === i).map(p => (
                       <SelectItem key={p.cpt} value={p.cpt}>
                         {p.label} (CPT {p.cpt})
@@ -405,8 +416,14 @@ const MapPage = () => {
             </div>
             )}
             {selectedSpecialty !== 'Gastroenterology' && selectedCrt && (
-              <div className="text-sm text-muted-foreground px-2 py-1 bg-muted/50 rounded-md">
-                {selectedCrt.label} (CPT {selectedCrt.cpt})
+              <div className="flex items-center justify-between text-sm bg-muted/50 rounded-md px-3 py-2">
+                <div>
+                  <span className="text-muted-foreground">{selectedCrt.label}</span>
+                  <span className="text-xs text-muted-foreground ml-1">(CPT {selectedCrt.cpt})</span>
+                </div>
+                <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => navigate('/onboarding')}>
+                  Change
+                </Button>
               </div>
             )}
           </div>
@@ -443,6 +460,9 @@ const MapPage = () => {
                 const yourPlanEst = hospitalPayerPrice != null && hasFullPlanData
                   ? computeYourPlanEstimate(hospitalPayerPrice, insurance!.deductible, insurance!.coinsurance!)
                   : null;
+                const hospitalOop = hospitalPayerPrice != null && activePlanConfig && selectedCrt?.bundleId
+                  ? computeOop(hospitalPayerPrice, activePlanConfig, selectedCrt.bundleId, selectedCrt?.cpt ?? null)
+                  : null;
                 return (
                   <div
                     key={hospitalName}
@@ -463,29 +483,19 @@ const MapPage = () => {
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Price not disclosed</span>
                         )}
-                        {yourPlanEst != null ? (
+                        {hospitalOop ? (
                           <span className="text-xs text-primary ml-2">
-                            Your est. ${yourPlanEst.toLocaleString()}
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="w-3 h-3 inline ml-0.5 -mt-0.5" />
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-xs text-xs">
-                                <p>Estimated as ({payerLabel} rate − your ${insurance!.deductible.toLocaleString()} deductible) × {insurance!.coinsurance}% coinsurance</p>
-                              </TooltipContent>
-                            </Tooltip>
+                            {hospitalOop.ruleType === 'preventive' ? (
+                              <>$0 <span className="bg-green-50 text-green-700 px-1 rounded text-[10px]">ACA preventive</span></>
+                            ) : hospitalOop.ruleType === 'copay_only' ? (
+                              <>Copay ${hospitalOop.estimate}</>
+                            ) : (
+                              <>You pay ${hospitalOop.estimate.toLocaleString()}</>
+                            )}
                           </span>
-                        ) : hospitalPayerPrice != null && !hasFullPlanData ? (
-                          <span className="text-xs text-muted-foreground ml-2">
-                            ${Math.round(hospitalPayerPrice).toLocaleString()}
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="w-3 h-3 inline ml-0.5 -mt-0.5" />
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-xs text-xs">
-                                <p>This is the {payerLabel} negotiated rate. Enter your deductible and coinsurance for a personalized estimate.</p>
-                              </TooltipContent>
-                            </Tooltip>
+                        ) : yourPlanEst != null ? (
+                          <span className="text-xs text-primary ml-2">
+                            You pay ${yourPlanEst.toLocaleString()}
                           </span>
                         ) : null}
                       </div>
@@ -512,6 +522,25 @@ const MapPage = () => {
                             Price range was not disclosed by this facility
                           </div>
                         )}
+                        {/* Mini price sources at hospital level */}
+                        {hData && (() => {
+                          const sources = getAllPriceSources(hData, insuranceCarrierLabel);
+                          if (sources.length === 0) return null;
+                          return (
+                            <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs space-y-0.5">
+                              <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Price sources</p>
+                              {sources.slice(0, 3).map((src, i) => (
+                                <div key={i} className="flex justify-between">
+                                  <span className="text-muted-foreground">{src.label}</span>
+                                  <span className="font-medium">${Math.round(src.price).toLocaleString()}</span>
+                                </div>
+                              ))}
+                              {sources.length > 3 && (
+                                <p className="text-muted-foreground italic">+{sources.length - 3} more sources</p>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {hospitalProviders.map(p => (
                           <div key={p.id} onClick={() => setSelectedProvider(p)} className="cursor-pointer">
                             <ProviderCard

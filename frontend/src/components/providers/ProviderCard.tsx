@@ -255,7 +255,7 @@ const ProviderCard = ({
             All price sources
           </button>
           {sourcesOpen && (
-            <div className="bg-muted/50 rounded-xl p-4 mt-2 space-y-1.5">
+            <div className="bg-muted/50 rounded-xl p-4 mt-2 space-y-1.5 max-h-[300px] overflow-y-auto">
               {getAllPriceSources(hospital, insuranceLabel).map((src, i) => (
                 <div key={i} className="flex justify-between text-sm">
                   <span className="text-muted-foreground flex items-center gap-1">
