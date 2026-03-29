@@ -222,12 +222,18 @@ const MapPage = () => {
     }
   }, [hospitals]);
 
-  // Scroll to hospital after pin click (fires after DOM commit)
+  // Scroll to hospital after pin click — wait for expand animation, then scroll header to top
   useEffect(() => {
     if (!scrollToHospital) return;
+    // Double rAF ensures DOM has settled after collapse state change
     requestAnimationFrame(() => {
-      hospitalRefsMap.current.get(scrollToHospital)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setScrollToHospital(null);
+      requestAnimationFrame(() => {
+        const el = hospitalRefsMap.current.get(scrollToHospital);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        setScrollToHospital(null);
+      });
     });
   }, [scrollToHospital, collapsedHospitals]);
 
