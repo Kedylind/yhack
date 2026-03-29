@@ -196,9 +196,20 @@ const MapPage = () => {
       list.push(p);
       groups.set(key, list);
     }
-    return Array.from(groups.entries())
-      .filter(([name]) => hospitals.some(h => h.name === name))
-      .sort((a, b) => b[1].length - a[1].length);
+    const hospitalGroups: [string, Provider[]][] = [];
+    const independentProviders: Provider[] = [];
+    for (const [name, provs] of groups) {
+      if (hospitals.some(h => h.name === name)) {
+        hospitalGroups.push([name, provs]);
+      } else {
+        independentProviders.push(...provs);
+      }
+    }
+    hospitalGroups.sort((a, b) => b[1].length - a[1].length);
+    if (independentProviders.length > 0) {
+      hospitalGroups.push(['Independent Providers', independentProviders]);
+    }
+    return hospitalGroups;
   }, [filtered, hospitals]);
 
   // Collapse ALL hospitals by default when data loads

@@ -90,6 +90,49 @@ def _npi_jitter_lat_lng(npi: str) -> tuple[float, float]:
     return _AZ_MVP_REF_LAT + lat_off, _AZ_MVP_REF_LNG + lng_off
 
 
+# Address patterns → hospital name (for NPPES providers lacking hospital field)
+_ADDRESS_HOSPITAL_PATTERNS: list[tuple[list[str], str]] = [
+    (
+        ["55 FRUIT ST", "MASSACHUSETTS GENERAL", "MASS GENERAL", "15 PARKMAN"],
+        "Massachusetts General Hospital",
+    ),
+    (
+        ["330 BROOKLINE AVE", "BIDMC", "BETH ISRAEL", "SHAPIRO"],
+        "Beth Israel Deaconess Medical Center",
+    ),
+    (
+        ["72 EAST CONCORD", "725 ALBANY", "609 ALBANY", "715 ALBANY", "850 HARRISON"],
+        "Boston Medical Center",
+    ),
+    (
+        ["221 LONGWOOD", "75 FRANCIS", "45 FRANCIS", "BRIGHAM AND WOMEN", "111 CYPRESS"],
+        "Brigham and Women's Hospital",
+    ),
+    (["DANA FARBER", "DANA-FARBER", "44 BINNEY", "450 BROOKLINE"], "Dana-Farber Cancer Institute"),
+    (["300 LONGWOOD", "CHILDRENS", "CHILDREN'S"], "Boston Children's Hospital"),
+    (
+        ["800 WASHINGTON", "750 WASHINGTON", "TUFTS MEDICAL", "NEW ENGLAND MED"],
+        "Tufts Medical Center",
+    ),
+    (["1493 CAMBRIDGE", "CHA CAMBRIDGE"], "CHA Cambridge Hospital"),
+    (["MOUNT AUBURN", "MT AUBURN", "330 MOUNT AUBURN"], "Mount Auburn Hospital"),
+    (
+        ["736 CAMBRIDGE ST", "ST ELIZABETH", "ST. ELIZABETH"],
+        "BMC Brighton (Formerly St. Elizabeth's)",
+    ),
+    (["1153 CENTRE", "FAULKNER"], "Brigham and Women's Faulkner"),
+]
+
+
+def _infer_hospital_from_address(address: str, city: str) -> str:
+    """Best-effort hospital match from provider address. Returns '' if no match."""
+    text = f"{address} {city}".upper()
+    for patterns, hospital_name in _ADDRESS_HOSPITAL_PATTERNS:
+        if any(p.upper() in text for p in patterns):
+            return hospital_name
+    return ""
+
+
 def _parse_float_cell(raw: str) -> float | None:
     s = (raw or "").strip()
     if not s:
@@ -256,7 +299,8 @@ def import_az_providers_csv(
             "phone": row["phone"].strip(),
             "specialties": [specialty],
             "source": "az_mvp",
-            "hospital": row.get("hospital", "").strip(),
+            "hospital": row.get("hospital", "").strip()
+            or _infer_hospital_from_address(row.get("address", ""), row.get("city", "")),
         }
         col.replace_one({"_id": npi}, doc, upsert=True)
         count += 1
