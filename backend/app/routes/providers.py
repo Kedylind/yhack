@@ -21,6 +21,7 @@ def _doc_to_item(doc: dict[str, Any]) -> ProviderListItem:
         phone=doc.get("phone"),
         specialties=doc.get("specialties", []),
         source=doc.get("source"),
+        hospital=doc.get("hospital"),
     )
 
 
@@ -40,9 +41,10 @@ def list_providers(
     in_network_only: bool | None = Query(None),
     hospital: str | None = Query(None),
 ) -> list[ProviderListItem]:
-    _ = hospital
     _ = in_network_only
     q: dict[str, Any] = {"specialties": "Gastroenterology"}
+    if hospital:
+        q["hospital"] = hospital.strip()
     if zip:
         q["zip"] = zip.strip()
     if specialty and specialty.strip() and specialty.lower() not in ("all", "gastroenterology"):
@@ -54,7 +56,9 @@ def list_providers(
         try:
             min_lng, min_lat, max_lng, max_lat = _parse_bbox(bbox)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail="bbox must be minLng,minLat,maxLng,maxLat") from e
+            raise HTTPException(
+                status_code=400, detail="bbox must be minLng,minLat,maxLng,maxLat"
+            ) from e
         filtered: list[dict[str, Any]] = []
         for d in docs:
             lng, lat = d["location"]["coordinates"]

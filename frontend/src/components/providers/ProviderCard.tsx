@@ -16,6 +16,7 @@ const ProviderCard = ({ provider, estimate, onSave, saved = false, compact = fal
       <div>
         <h3 className="font-semibold text-lg leading-tight">{provider.name}</h3>
         <p className="text-sm text-muted-foreground mt-0.5">{provider.specialty.join(', ')}</p>
+        {provider.hospital && <p className="text-xs text-muted-foreground">{provider.hospital}</p>}
       </div>
       {provider.distance !== undefined && (
         <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">{provider.distance.toFixed(1)} mi</span>

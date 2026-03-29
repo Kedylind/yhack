@@ -119,6 +119,7 @@ class ProviderListItem(BaseModel):
     phone: str | None = None
     specialties: list[str]
     source: str | None = None
+    hospital: str | None = None
 
 
 class ProvidersQuery(BaseModel):

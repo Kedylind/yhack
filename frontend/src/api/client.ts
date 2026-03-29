@@ -24,6 +24,7 @@ export type ProviderApi = {
   phone?: string;
   specialties: string[];
   source?: string;
+  hospital?: string;
 };
 
 export type ProvenanceItem = {

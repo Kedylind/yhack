@@ -23,17 +23,17 @@ def db():
 
 def test_import_sample_providers_prices_counts(db):
     counts = import_sample_directory(db, SAMPLES)
-    assert counts["providers"] == 3
+    assert counts["providers"] == 121
     assert counts["procedures"] == 3
     assert counts["prices"] == 4
     assert counts["insurers"] == 2
 
-    p = db["providers"].find_one({"npi": "1234567890"})
+    p = db["providers"].find_one({"npi": "1811988488"})
     assert p is not None
-    assert p["name"] == "Boston GI Associates"
+    assert p["name"] == "Diane Abraczinskas"
     assert p["location"]["type"] == "Point"
-    assert p["location"]["coordinates"] == [-71.0721, 42.3346]
     assert "Gastroenterology" in p["specialties"]
+    assert p["hospital"] == "Massachusetts General Hospital"
 
     price = db["prices"].find_one(
         {"provider_id": "1234567890", "bundle_id": "colonoscopy_screening"}

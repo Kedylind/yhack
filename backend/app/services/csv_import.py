@@ -46,6 +46,7 @@ PROVIDERS_COLUMNS = (
     "phone",
     "specialties",
     "source",
+    "hospital",
 )
 PROCEDURES_COLUMNS = ("bundle_id", "label", "cpt_codes", "tags", "source")
 PRICES_COLUMNS = (
@@ -128,6 +129,7 @@ def import_providers_csv(db: Database, path: Path) -> int:
             "phone": row["phone"].strip(),
             "specialties": specialties,
             "source": row["source"].strip(),
+            "hospital": row.get("hospital", "").strip(),
         }
         col.replace_one({"_id": npi}, doc, upsert=True)
         count += 1

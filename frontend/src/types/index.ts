@@ -8,6 +8,7 @@ export interface Provider {
   phone?: string;
   inNetwork?: boolean;
   distance?: number;
+  hospital?: string;
 }
 
 export interface CostEstimate {

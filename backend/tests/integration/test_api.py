@@ -20,8 +20,9 @@ def test_providers_list(client: TestClient) -> None:
     r = client.get("/api/providers")
     assert r.status_code == 200
     data = r.json()
-    assert len(data) == 3
+    assert len(data) == 121
     assert data[0]["specialties"] == ["Gastroenterology"]
+    assert "hospital" in data[0]
 
 
 def test_estimate_returns_bundles_and_prices(client: TestClient) -> None:
@@ -40,8 +41,8 @@ def test_estimate_returns_bundles_and_prices(client: TestClient) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["bundle_id"] == "colonoscopy_screening"
-    assert len(body["estimates"]) == 3
-    est = next(e for e in body["estimates"] if e["provider_id"] == "1234567890")
+    assert len(body["estimates"]) == 121
+    est = body["estimates"][0]
     assert est["allowed_amount_range"]["min"] <= est["allowed_amount_range"]["max"]
 
 

@@ -8,7 +8,7 @@ import ProviderCard from '@/components/providers/ProviderCard';
 import Chip from '@/components/Chip';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, List, MapPin } from 'lucide-react';
+import { Search, List, MapPin, Building2, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Provider } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { fetchProviders, postEstimate, type ProviderApi } from '@/api/client';
@@ -25,6 +25,7 @@ function toProvider(p: ProviderApi): Provider {
     lat: p.lat,
     lng: p.lng,
     phone: p.phone,
+    hospital: p.hospital,
   };
 }
 
@@ -45,6 +46,7 @@ const MapPage = () => {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [showList, setShowList] = useState(false);
+  const [collapsedHospitals, setCollapsedHospitals] = useState<Set<string>>(new Set());
 
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -92,6 +94,25 @@ const MapPage = () => {
       return matchSpec && matchSearch;
     });
   }, [providers, selectedSpecialty, searchQuery]);
+
+  const groupedByHospital = useMemo(() => {
+    const groups = new Map<string, Provider[]>();
+    for (const p of filtered) {
+      const key = p.hospital || 'Other';
+      const list = groups.get(key) ?? [];
+      list.push(p);
+      groups.set(key, list);
+    }
+    return Array.from(groups.entries()).sort((a, b) => b[1].length - a[1].length);
+  }, [filtered]);
+
+  const toggleHospital = (name: string) => {
+    setCollapsedHospitals(s => {
+      const next = new Set(s);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -197,18 +218,39 @@ const MapPage = () => {
                   saved={savedIds.has(selectedProvider.id)}
                 />
               </div>
-            ) : filtered.length > 0 ? (
-              filtered.map(p => (
-                <div key={p.id} onClick={() => setSelectedProvider(p)} className="cursor-pointer">
-                  <ProviderCard
-                    provider={p}
-                    estimate={estimateById.get(p.id)}
-                    onSave={() => toggleSave(p.id)}
-                    saved={savedIds.has(p.id)}
-                    compact
-                  />
-                </div>
-              ))
+            ) : groupedByHospital.length > 0 ? (
+              groupedByHospital.map(([hospitalName, hospitalProviders]) => {
+                const isCollapsed = collapsedHospitals.has(hospitalName);
+                return (
+                  <div key={hospitalName} className="mb-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleHospital(hospitalName)}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-left"
+                    >
+                      {isCollapsed ? <ChevronRight className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+                      <Building2 className="w-4 h-4 shrink-0 text-primary" />
+                      <span className="font-semibold text-sm flex-1 truncate">{hospitalName}</span>
+                      <span className="text-xs text-muted-foreground">{hospitalProviders.length}</span>
+                    </button>
+                    {!isCollapsed && (
+                      <div className="mt-2 space-y-2 pl-2">
+                        {hospitalProviders.map(p => (
+                          <div key={p.id} onClick={() => setSelectedProvider(p)} className="cursor-pointer">
+                            <ProviderCard
+                              provider={p}
+                              estimate={estimateById.get(p.id)}
+                              onSave={() => toggleSave(p.id)}
+                              saved={savedIds.has(p.id)}
+                              compact
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             ) : (
               <div className="text-center py-12">
                 <MapPin className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
