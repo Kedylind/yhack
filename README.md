@@ -105,6 +105,37 @@ Starts MongoDB and the API; import data separately with `import_csv_to_mongo.py`
 2. Deploy the **backend** from `backend/` (Dockerfile) with `CORS_ORIGINS` set to your static site origin.
 3. Build the **frontend** with `VITE_API_BASE_URL` = your API URL; host `frontend/dist` as a static site or serve behind the same origin.
 
+## Transparent Pricing Branch Setup (`feat/yhack-transparent-pricing`)
+
+This branch has a completely reworked pricing engine with multi-source hospital rates, provider transparency, and OOP estimation. It uses a **separate database** (`boston_gi_transparent`) to avoid interfering with the stable `david-dev` Railway deployment.
+
+### Quick start
+
+```bash
+git checkout feat/yhack-transparent-pricing
+cp backend/.env.example backend/.env
+# Edit backend/.env — fill in the MongoDB password (ask in team chat)
+
+cd backend
+pip install -r requirements.txt
+cd ..
+python scripts/import_csv_to_mongo.py --az-mvp
+
+cd backend
+uvicorn app.main:app --reload
+# Health check: http://127.0.0.1:8000/api/health
+```
+
+### What's different from `david-dev`?
+
+- Database: `boston_gi_transparent` (not `boston_gi_demo`)
+- 6 collections: providers, procedures, prices, insurers, hospital_rates, users
+- 28-column hospital_rates with multi-payer negotiated rates
+- New API routes: `/api/hospitals`, `/api/payment-table`
+- Data seeded from `data/az-data/` CSVs (committed in git)
+
+> **Do NOT** change `MONGODB_DB_NAME` back to `boston_gi_demo` — that would overwrite the stable production data.
+
 ## Disclaimer
 
 Demo only — always **call your plan** to verify network status and cost.
