@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,12 @@ import Navbar from '@/components/layout/Navbar';
 import type { UserProfile, InsuranceProfile } from '@/types';
 import { CheckCircle2 } from 'lucide-react';
 import { postIntake } from '@/api/client';
+import {
+  BCBS_PLAN_OPTIONS,
+  INSURERS_FROM_RATES,
+  isBcbsInsurerKey,
+} from '@/lib/hospitalRatesCsv';
+import { maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
 
 const STEPS = ['About you', 'Coverage', 'Care focus'];
 
@@ -19,6 +25,9 @@ const SPECIALTIES = ['Gastroenterology'];
 const Onboarding = () => {
   const [step, setStep] = useState(0);
   const [profile, setProfile] = useState<UserProfile>({ fullName: '', zip: '' });
+  /** Display MM/DD/YYYY; ISO is stored on `profile.dob` when leaving step 0 */
+  const [dobDisplay, setDobDisplay] = useState('');
+  const [dobError, setDobError] = useState<string | null>(null);
   const [insurance, setInsurance] = useState<InsuranceProfile>({
     carrier: '', planName: '', planType: 'PPO', deductible: 0, oopMax: 0,
   });
@@ -27,8 +36,25 @@ const Onboarding = () => {
   const { setProfile: saveProfile, setInsurance: saveInsurance, setIntakePayload, completeOnboarding } = useAuth();
   const navigate = useNavigate();
 
+  const selectedInsurerKey = useMemo(
+    () => INSURERS_FROM_RATES.find(i => i.label === insurance.carrier)?.key ?? '',
+    [insurance.carrier],
+  );
+  const bcbsSelected = isBcbsInsurerKey(selectedInsurerKey);
+
   const next = () => setStep(s => Math.min(s + 1, 2));
   const back = () => setStep(s => Math.max(s - 1, 0));
+
+  const goNextFromAbout = () => {
+    const iso = parseUsDateToIso(dobDisplay);
+    if (!iso) {
+      setDobError('Enter a valid date of birth as MM/DD/YYYY.');
+      return;
+    }
+    setDobError(null);
+    setProfile(p => ({ ...p, dob: iso }));
+    next();
+  };
 
   const submit = async () => {
     saveProfile(profile);
@@ -90,8 +116,22 @@ const Onboarding = () => {
               <Input value={profile.fullName} onChange={e => setProfile(p => ({ ...p, fullName: e.target.value }))} className="mt-1" />
             </div>
             <div>
-              <Label>Date of birth</Label>
-              <Input type="date" value={profile.dob || ''} onChange={e => setProfile(p => ({ ...p, dob: e.target.value }))} className="mt-1" />
+              <Label htmlFor="dob">Date of birth</Label>
+              <Input
+                id="dob"
+                type="text"
+                inputMode="numeric"
+                autoComplete="bday"
+                placeholder="MM/DD/YYYY"
+                value={dobDisplay}
+                onChange={e => {
+                  setDobDisplay(maskUsDateDigits(e.target.value));
+                  setDobError(null);
+                }}
+                className="mt-1"
+                maxLength={10}
+              />
+              {dobError && <p className="text-xs text-destructive mt-1">{dobError}</p>}
             </div>
             <div>
               <Label>ZIP code <span className="text-muted-foreground font-normal">(Boston area)</span></Label>
@@ -101,7 +141,11 @@ const Onboarding = () => {
               <Label>Phone <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Input value={profile.phone || ''} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} className="mt-1" />
             </div>
-            <Button className="w-full bg-primary text-primary-foreground hover:bg-primary-hover h-11 mt-2" onClick={next} disabled={!profile.fullName || !profile.zip}>
+            <Button
+              className="w-full bg-primary text-primary-foreground hover:bg-primary-hover h-11 mt-2"
+              onClick={goNextFromAbout}
+              disabled={!profile.fullName || !profile.zip || !parseUsDateToIso(dobDisplay)}
+            >
               Continue
             </Button>
           </div>
@@ -112,11 +156,57 @@ const Onboarding = () => {
             <h2 className="text-xl font-bold">Your coverage</h2>
             <div>
               <Label>Insurance carrier</Label>
-              <Input value={insurance.carrier} onChange={e => setInsurance(ins => ({ ...ins, carrier: e.target.value }))} placeholder="e.g. Blue Cross" className="mt-1" />
+              <Select
+                value={selectedInsurerKey || undefined}
+                onValueChange={key => {
+                  const opt = INSURERS_FROM_RATES.find(o => o.key === key);
+                  if (!opt) return;
+                  setInsurance(ins => ({
+                    ...ins,
+                    carrier: opt.label,
+                    planName: '',
+                  }));
+                }}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select your insurer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INSURERS_FROM_RATES.map(opt => (
+                    <SelectItem key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Plan name</Label>
-              <Input value={insurance.planName} onChange={e => setInsurance(ins => ({ ...ins, planName: e.target.value }))} className="mt-1" />
+              {bcbsSelected ? (
+                <Select
+                  value={insurance.planName || undefined}
+                  onValueChange={v => setInsurance(ins => ({ ...ins, planName: v }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select a BCBS plan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BCBS_PLAN_OPTIONS.map(plan => (
+                      <SelectItem key={plan} value={plan}>
+                        {plan}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={insurance.planName}
+                  onChange={e => setInsurance(ins => ({ ...ins, planName: e.target.value }))}
+                  placeholder="Plan name"
+                  className="mt-1"
+                  disabled={!insurance.carrier}
+                />
+              )}
             </div>
             <div>
               <Label>Member ID <span className="text-muted-foreground font-normal">(optional)</span></Label>

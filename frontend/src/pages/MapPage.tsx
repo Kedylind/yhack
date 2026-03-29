@@ -162,7 +162,9 @@ const MapPage = () => {
           <div className="p-4 border-b border-border space-y-3">
             {loadError && (
               <p className="text-sm text-destructive">
-                Could not load data. Start the API (see README) or check the network tab.
+                Could not load map data. Run the API on port 8000, ensure MongoDB is running, and seed providers
+                (see the repo README). The Vite dev server proxies <code className="text-xs">/api</code> to{' '}
+                <code className="text-xs">127.0.0.1:8000</code>.
               </p>
             )}
             {providersQuery.isLoading && <p className="text-sm text-muted-foreground">Loading providers…</p>}
