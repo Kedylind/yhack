@@ -64,27 +64,19 @@ const MapPage = () => {
     insurance?.carrier ||
     'Your plan';
 
-  // --- CRT selection state ---
-  const [selectedCrt, setSelectedCrt] = useState<{ cpt: string; label: string; bundleId: string } | null>(null);
-
-  // Pre-populate from onboarding if user already selected a procedure
-  useEffect(() => {
-    if (selectedCrt) return;
+  // --- CRT selection state (initialized synchronously from onboarding to avoid dialog flash) ---
+  const [selectedCrt, setSelectedCrt] = useState<{ cpt: string; label: string; bundleId: string } | null>(() => {
     if (typeof intakePayload?.cpt_code === 'string' && intakePayload.cpt_code) {
-      // Try GI procedures first
       const match = EGD_PROCEDURES.find(p => p.cpt === intakePayload.cpt_code);
-      if (match) {
-        setSelectedCrt({ cpt: match.cpt, label: match.label, bundleId: match.bundleId });
-      } else {
-        // Non-GI specialty (e.g., Dermatology) — use onboarding data directly
-        setSelectedCrt({
-          cpt: intakePayload.cpt_code as string,
-          label: (intakePayload.procedure_label as string) ?? intakePayload.cpt_code as string,
-          bundleId: (intakePayload.bundle_id as string) ?? intakePayload.cpt_code as string,
-        });
-      }
+      if (match) return { cpt: match.cpt, label: match.label, bundleId: match.bundleId };
+      return {
+        cpt: intakePayload.cpt_code as string,
+        label: (intakePayload.procedure_label as string) ?? intakePayload.cpt_code as string,
+        bundleId: (intakePayload.bundle_id as string) ?? intakePayload.cpt_code as string,
+      };
     }
-  }, [intakePayload, selectedCrt]);
+    return null;
+  });
 
   // --- Filter / search state ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -132,12 +124,12 @@ const MapPage = () => {
       const fallback = {
         zip: '02118',
         insurance_carrier: 'Blue Cross Blue Shield of Massachusetts',
-        care_focus: 'Gastroenterology',
-        scenario_id: selectedCrt?.bundleId ?? 'colonoscopy_screening',
-        bundle_id: selectedCrt?.bundleId ?? 'colonoscopy_screening',
+        care_focus: selectedSpecialty,
+        scenario_id: selectedCrt?.bundleId ?? '',
+        bundle_id: selectedCrt?.bundleId ?? '',
       };
       const intake = { ...fallback, ...(intakePayload ?? {}) };
-      const bundle_id = selectedCrt?.bundleId ?? (typeof intake.bundle_id === 'string' && intake.bundle_id ? intake.bundle_id : 'colonoscopy_screening');
+      const bundle_id = selectedCrt?.bundleId ?? (typeof intake.bundle_id === 'string' && intake.bundle_id ? intake.bundle_id : '');
       const scenario_id = typeof intake.scenario_id === 'string' && intake.scenario_id ? intake.scenario_id : bundle_id;
       return postEstimate({ intake, bundle_id, scenario_id });
     },
@@ -247,7 +239,7 @@ const MapPage = () => {
       const marker = L.marker([h.lat, h.lng], { icon })
         .bindPopup(
           `<strong>${h.name}</strong><br/>` +
-          `<span style="font-size:12px">${h.doctor_count} GI doctors</span>` +
+          `<span style="font-size:12px">${h.doctor_count} ${selectedSpecialty === 'Dermatology' ? 'dermatologists' : 'GI doctors'}</span>` +
           (payerPrice != null ? `<br/><span style="font-size:12px;font-weight:600;color:hsl(345,42%,45%);">${payerLabel}: ${priceLabel}</span>` : '') +
           rangeText,
         )
@@ -280,11 +272,13 @@ const MapPage = () => {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      {/* CRT Selection Popup — must select before seeing prices */}
-      <CrtSelectionDialog
-        open={selectedCrt === null}
-        onSelect={(cpt, label, bundleId) => setSelectedCrt({ cpt, label, bundleId })}
-      />
+      {/* CRT Selection Popup — only for GI when no procedure pre-selected */}
+      {selectedSpecialty === 'Gastroenterology' && (
+        <CrtSelectionDialog
+          open={selectedCrt === null}
+          onSelect={(cpt, label, bundleId) => setSelectedCrt({ cpt, label, bundleId })}
+        />
+      )}
 
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
         <div className="flex-1 relative min-h-[400px] lg:min-h-0">
@@ -358,7 +352,8 @@ const MapPage = () => {
               </Button>
             </div>
 
-            {/* CRT procedure filter */}
+            {/* CRT procedure filter — only for GI (derm users already selected via decision tree) */}
+            {selectedSpecialty === 'Gastroenterology' && (
             <div className="flex items-center gap-2">
               <Select
                 value={selectedCrt?.cpt ?? ''}
@@ -382,6 +377,12 @@ const MapPage = () => {
                 </SelectContent>
               </Select>
             </div>
+            )}
+            {selectedSpecialty !== 'Gastroenterology' && selectedCrt && (
+              <div className="text-sm text-muted-foreground px-2 py-1 bg-muted/50 rounded-md">
+                {selectedCrt.label} (CPT {selectedCrt.cpt})
+              </div>
+            )}
           </div>
 
           <div className="p-4 space-y-3">
