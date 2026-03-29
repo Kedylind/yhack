@@ -1,3 +1,5 @@
-# Welcome to your Lovable project
+# CareCost — frontend
 
-TODO: Document your project here
+Vite + React app for **CareCost** (map, onboarding, AI-guided GI flow, Auth0).
+
+Full setup, environment variables, API overview, YHack tracks, and deployment notes are in the **[repository root `README.md`](../README.md)**.

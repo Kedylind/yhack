@@ -1,6 +1,14 @@
-# Boston GI Healthcare Map Demo
+<div align="center">
 
-Provenance-first healthcare shopping demo for **Boston**, **Gastroenterology**, **Blue Cross Blue Shield of Massachusetts**. Stack: **FastAPI** + **MongoDB** + **Vite/React** (Leaflet map).
+# CareC❤️st
+
+*Know what care costs before it costs you.*
+
+</div>
+
+CareCost is a **provenance-first healthcare shopping** experience: compare **out-of-pocket bands**, explore **providers on a map**, and use **AI agents** that ask interactive questions so you land on the right **CPT / procedure bundle**—then see it reflected on the map. The demo dataset focuses on **gastroenterology** (with plans to expand specialties). Stack: **FastAPI** + **MongoDB** + **Vite/React** (Leaflet).
+
+---
 
 ## YHack — tracks & prizes
 
