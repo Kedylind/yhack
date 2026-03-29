@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 
 /**
- * Figures from public and industry research on U.S. medical debt, cost-related care delays,
- * plan design, directory accuracy, and consumer price-shopping behavior.
+ * Figures from public and industry research on U.S. medical debt, hospital bad debt, cost-related care delays,
+ * plan design, and consumer price-shopping behavior.
  * Each card names what is being counted before interpreting it.
  */
 const STATS: { value: string; headline: string; text: string }[] = [
@@ -15,6 +15,11 @@ const STATS: { value: string; headline: string; text: string }[] = [
     value: '$220B+',
     headline: 'Total medical debt owed by people in the United States',
     text: 'Government and census-based analyses estimate households together owe at least this much for medical bills. Medical debt is widespread among insured families, not only the uninsured.',
+  },
+  {
+    value: '$17B+',
+    headline: 'Annual bad debt from unpaid patient bills at U.S. hospitals and providers',
+    text: 'Recent national industry analyses that track payments across large samples of hospitals and physicians have put annual bad debt from unpaid patient balances in the ballpark of tens of billions of dollars. When people cannot see or plan for what they will owe before care, more of that balance turns into write-offs. Price transparency is not the only lever, but clearer, earlier numbers can reduce sticker shock and unpaid balances, which would help bring even that total down over time.',
   },
   {
     value: '36.3%',
