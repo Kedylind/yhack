@@ -244,6 +244,7 @@ def import_az_providers_csv(db: Database, path: Path) -> int:
             "phone": row["phone"].strip(),
             "specialties": ["Gastroenterology"],
             "source": "az_mvp",
+            "hospital": row.get("hospital", "").strip(),
         }
         col.replace_one({"_id": npi}, doc, upsert=True)
         count += 1
