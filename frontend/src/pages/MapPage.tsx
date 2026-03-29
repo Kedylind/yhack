@@ -276,7 +276,7 @@ const MapPage = () => {
         onSelect={(cpt, label, bundleId) => setSelectedCrt({ cpt, label, bundleId })}
       />
 
-      <div className="flex-1 flex flex-col lg:flex-row">
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
         <div className="flex-1 relative min-h-[400px] lg:min-h-0">
           <div ref={mapContainerRef} className="absolute inset-0 z-0" />
 
@@ -384,7 +384,12 @@ const MapPage = () => {
                   provider={selectedProvider}
                   estimate={estimateById.get(String(selectedProvider.id))}
                   insuranceLabel={insuranceCarrierLabel}
-                  hasFullPlanData={hasFullPlanData}
+                  hospitalPayerPrice={(() => {
+                    const h = hospitals.find(x => x.name === selectedProvider.hospital);
+                    return h ? getPayerPrice(h, insuranceCarrierLabel) : null;
+                  })()}
+                  deductible={insurance?.deductible}
+                  coinsurancePct={insurance?.coinsurance}
                   onSave={() => toggleSave(selectedProvider.id)}
                   saved={savedIds.has(selectedProvider.id)}
                 />
@@ -472,7 +477,9 @@ const MapPage = () => {
                               provider={p}
                               estimate={estimateById.get(String(p.id))}
                               insuranceLabel={insuranceCarrierLabel}
-                              hasFullPlanData={hasFullPlanData}
+                              hospitalPayerPrice={hospitalPayerPrice}
+                              deductible={insurance?.deductible}
+                              coinsurancePct={insurance?.coinsurance}
                               onSave={() => toggleSave(p.id)}
                               saved={savedIds.has(p.id)}
                               compact

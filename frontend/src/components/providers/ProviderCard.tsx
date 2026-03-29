@@ -1,6 +1,7 @@
 import { MapPin, Phone, Bookmark, ExternalLink, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { computeYourPlanEstimate } from '@/lib/payerPrice';
 import type { Provider, CostEstimate } from '@/types';
 
 interface ProviderCardProps {
@@ -8,42 +9,94 @@ interface ProviderCardProps {
   estimate?: CostEstimate;
   /** Shown above your-plan pricing (e.g. carrier from onboarding). */
   insuranceLabel?: string;
-  /** When false, show negotiated rate instead of OOP range. */
-  hasFullPlanData?: boolean;
+  /** Hospital-level negotiated rate from hospital_rates (primary price source). */
+  hospitalPayerPrice?: number | null;
+  /** User's deductible from insurance profile. */
+  deductible?: number;
+  /** User's coinsurance % from insurance profile. */
+  coinsurancePct?: number;
   onSave?: () => void;
   saved?: boolean;
   compact?: boolean;
 }
 
-/** Format the primary price line based on whether we have full plan data. */
-function formatPrice(estimate: CostEstimate, hasFullPlanData: boolean): { label: string; tooltip: string } {
-  if (hasFullPlanData) {
-    const min = estimate.oopMin;
-    const max = estimate.oopMax ?? estimate.patientResponsibility;
-    const price = min !== undefined && max !== undefined && min !== max
-      ? `$${min.toLocaleString()}–$${max.toLocaleString()}`
-      : `$${max.toLocaleString()}`;
-    return { label: price, tooltip: 'Estimated as (negotiated rate - your deductible) x your coinsurance %. Call your plan to verify.' };
+interface PriceDisplay {
+  label: string;
+  sectionTitle: string;
+  lineLabel: string;
+  tooltip: string;
+}
+
+function buildPriceDisplay(
+  hospitalPayerPrice: number | null | undefined,
+  deductible: number | undefined,
+  coinsurancePct: number | undefined,
+  estimate: CostEstimate | undefined,
+): PriceDisplay {
+  const hasFullPlan = deductible != null && coinsurancePct != null;
+
+  // Priority 1: hospital_rates price (most reliable)
+  if (hospitalPayerPrice != null) {
+    if (hasFullPlan) {
+      const est = computeYourPlanEstimate(hospitalPayerPrice, deductible, coinsurancePct);
+      return {
+        label: `$${est.toLocaleString()}`,
+        sectionTitle: 'Your plan',
+        lineLabel: 'Est. cost (your insurance)',
+        tooltip: `Estimated as ($${hospitalPayerPrice.toLocaleString()} negotiated rate − $${deductible.toLocaleString()} deductible) × ${coinsurancePct}% coinsurance. Call your plan to verify.`,
+      };
+    }
+    return {
+      label: `$${Math.round(hospitalPayerPrice).toLocaleString()}`,
+      sectionTitle: 'Negotiated rate',
+      lineLabel: 'Base price',
+      tooltip: 'This is the negotiated rate between your insurer and this hospital. Enter your deductible and coinsurance for a personalized estimate.',
+    };
   }
-  // No full plan data — show negotiated rate as the base price
-  const allowed = estimate.allowedMaxDollars ?? estimate.allowedMinDollars;
-  if (allowed != null && allowed > 0) {
-    return { label: `$${allowed.toLocaleString()}`, tooltip: 'This is the negotiated rate. Enter your deductible and coinsurance for a personalized estimate.' };
+
+  // Priority 2: estimate pipeline's allowed amount (fallback)
+  if (estimate) {
+    const allowed = estimate.allowedMaxDollars ?? estimate.allowedMinDollars;
+    if (allowed != null && allowed > 0) {
+      if (hasFullPlan) {
+        const est = computeYourPlanEstimate(allowed, deductible, coinsurancePct);
+        return {
+          label: `$${est.toLocaleString()}`,
+          sectionTitle: 'Your plan',
+          lineLabel: 'Est. cost (your insurance)',
+          tooltip: `Estimated from provider-level rate ($${allowed.toLocaleString()}). Call your plan to verify.`,
+        };
+      }
+      return {
+        label: `$${allowed.toLocaleString()}`,
+        sectionTitle: 'Negotiated rate',
+        lineLabel: 'Base price',
+        tooltip: 'Provider-level negotiated rate. Enter your deductible and coinsurance for a personalized estimate.',
+      };
+    }
   }
-  const max = estimate.oopMax ?? estimate.patientResponsibility;
-  return { label: `$${max.toLocaleString()}`, tooltip: 'Enter your deductible and coinsurance for a personalized estimate.' };
+
+  return {
+    label: '—',
+    sectionTitle: 'Pricing',
+    lineLabel: 'Price',
+    tooltip: 'Price data is not available for this provider.',
+  };
 }
 
 const ProviderCard = ({
   provider,
   estimate,
   insuranceLabel = 'Your plan',
-  hasFullPlanData = false,
+  hospitalPayerPrice,
+  deductible,
+  coinsurancePct,
   onSave,
   saved = false,
   compact = false,
 }: ProviderCardProps) => {
-  const priceInfo = estimate ? formatPrice(estimate, hasFullPlanData) : null;
+  const hasPrice = hospitalPayerPrice != null || (estimate?.allowedMaxDollars ?? 0) > 0;
+  const price = buildPriceDisplay(hospitalPayerPrice, deductible, coinsurancePct, estimate);
 
   return (
     <div className="bg-card rounded-2xl border border-border shadow-card p-5 animate-fade-in">
@@ -77,79 +130,50 @@ const ProviderCard = ({
         </span>
       )}
 
-      {estimate && !compact && (
+      {hasPrice && !compact && (
         <div className="bg-muted rounded-xl p-4 mb-4 space-y-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-              {hasFullPlanData ? 'Your plan' : 'Negotiated rate'}
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">{price.sectionTitle}</p>
             <p className="text-xs text-muted-foreground mb-2">{insuranceLabel}</p>
-            {estimate.procedureName && <p className="text-sm font-medium mb-2">{estimate.procedureName}</p>}
             <div className="space-y-1 text-sm">
-              {hasFullPlanData && estimate.deductibleApplied !== undefined && (
-                <div className="flex justify-between"><span className="text-muted-foreground">Deductible applied</span><span>${estimate.deductibleApplied}</span></div>
-              )}
-              {hasFullPlanData && estimate.copay !== undefined && (
-                <div className="flex justify-between"><span className="text-muted-foreground">Copay</span><span>${estimate.copay}</span></div>
-              )}
-              {hasFullPlanData && estimate.coinsurance !== undefined && (
-                <div className="flex justify-between"><span className="text-muted-foreground">Coinsurance</span><span>${estimate.coinsurance}</span></div>
-              )}
               <div className="flex justify-between items-center font-semibold pt-1 border-t border-border">
                 <span className="flex items-center gap-1">
-                  {hasFullPlanData ? 'Est. cost (your insurance)' : 'Base price'}
+                  {price.lineLabel}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs text-xs">
-                      <p>{priceInfo?.tooltip}</p>
+                      <p>{price.tooltip}</p>
                     </TooltipContent>
                   </Tooltip>
                 </span>
-                <span className="text-foreground">{priceInfo?.label}</span>
+                <span className="text-foreground">{price.label}</span>
               </div>
             </div>
           </div>
-          {estimate.otherInsurersOopMin !== undefined && estimate.otherInsurersOopMax !== undefined && (
-            <div className="pt-2 border-t border-border/80">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Other insurances (est.)</p>
-              <p className="text-sm text-foreground">
-                ${estimate.otherInsurersOopMin.toLocaleString()} – ${estimate.otherInsurersOopMax.toLocaleString()}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Range across other payer rates in our data (not your plan).</p>
-            </div>
-          )}
-          {estimate.note && <p className="text-xs text-muted-foreground pt-1">{estimate.note}</p>}
         </div>
       )}
 
-      {estimate && compact && (
+      {hasPrice && compact && (
         <div className="mb-3 space-y-1">
           <p className="text-sm font-medium">
             <span className="text-muted-foreground font-normal text-xs block">{insuranceLabel}</span>
-            {hasFullPlanData ? 'Est.' : 'Rate'}{' '}
-            <span className="text-foreground">{priceInfo?.label}</span>
-            {!hasFullPlanData && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="w-3 h-3 inline ml-1 -mt-0.5 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs text-xs">
-                  <p>{priceInfo?.tooltip}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            {price.sectionTitle === 'Your plan' ? 'Est.' : 'Rate'}{' '}
+            <span className="text-foreground">{price.label}</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="w-3 h-3 inline ml-1 -mt-0.5 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">
+                <p>{price.tooltip}</p>
+              </TooltipContent>
+            </Tooltip>
           </p>
-          {estimate.otherInsurersOopMin !== undefined && estimate.otherInsurersOopMax !== undefined && (
-            <p className="text-xs text-muted-foreground">
-              Others: ${estimate.otherInsurersOopMin.toLocaleString()}–${estimate.otherInsurersOopMax.toLocaleString()}
-            </p>
-          )}
         </div>
       )}
 
-      {!estimate && !compact && (
+      {!hasPrice && !compact && (
         <div className="bg-muted/30 border border-border rounded-xl px-4 py-3 mb-4">
           <p className="text-xs text-muted-foreground italic">Price data was not disclosed by this provider</p>
         </div>
