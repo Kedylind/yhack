@@ -15,7 +15,11 @@ from app.models.api import (
 )
 from app.services.intake import missing_required_fields, normalize_intake
 from app.services.oop import compute_oop_range_cents, deductible_remaining_unknown_from_intake
-from app.services.pricing import avg_confidence, min_max_allowed_for_provider_prices, pick_primary_source
+from app.services.pricing import (
+    avg_confidence,
+    min_max_allowed_for_provider_prices,
+    pick_primary_source,
+)
 from app.services.scenario_to_bundle import infer_scenario_id, scenario_to_bundle_id
 
 
@@ -48,9 +52,7 @@ def build_estimate_response(
     bundle_id = explicit_bundle_id or scenario_to_bundle_id(scenario_id)
 
     # City-wide GI providers for comparison; ZIP is logistics only for v1 demo
-    provider_docs = list(
-        db["providers"].find({"specialties": {"$in": ["Gastroenterology"]}})
-    )
+    provider_docs = list(db["providers"].find({"specialties": {"$in": ["Gastroenterology"]}}))
 
     providers_out = [_provider_to_api_dict(p) for p in provider_docs]
     estimates: list[ProviderEstimate] = []
@@ -61,11 +63,18 @@ def build_estimate_response(
     copay = merged.get("copay_cents")
     ded_unknown = deductible_remaining_unknown_from_intake(merged)
 
+    # Batch price lookup: one query instead of N round-trips
+    all_npis = [p["npi"] for p in provider_docs]
+    all_price_docs = list(
+        db["prices"].find({"provider_id": {"$in": all_npis}, "bundle_id": bundle_id})
+    )
+    prices_by_npi: dict[str, list[dict[str, Any]]] = {}
+    for pd in all_price_docs:
+        prices_by_npi.setdefault(pd["provider_id"], []).append(pd)
+
     for p in provider_docs:
         npi = p["npi"]
-        price_docs = list(
-            db["prices"].find({"provider_id": npi, "bundle_id": bundle_id})
-        )
+        price_docs = prices_by_npi.get(npi, [])
         amin, amax = min_max_allowed_for_provider_prices(price_docs)
         src = pick_primary_source(price_docs) if price_docs else "none"
         conf = avg_confidence(price_docs) if price_docs else 0.0
