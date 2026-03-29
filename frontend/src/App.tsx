@@ -17,6 +17,7 @@ import NotFound from "./pages/NotFound";
 import WhyItMatters from "./pages/WhyItMatters";
 import Team from "./pages/Team";
 import OurData from "./pages/OurData";
+import RequireFullProfile from "@/components/RequireFullProfile";
 
 const queryClient = new QueryClient();
 
@@ -37,8 +38,22 @@ const App = () => (
             <Route path="/signup" element={<Signup />} />
             <Route path="/callback" element={<AuthCallback />} />
             <Route path="/onboarding" element={<Onboarding />} />
-            <Route path="/map" element={<MapPage />} />
-            <Route path="/saved" element={<Saved />} />
+            <Route
+              path="/map"
+              element={
+                <RequireFullProfile>
+                  <MapPage />
+                </RequireFullProfile>
+              }
+            />
+            <Route
+              path="/saved"
+              element={
+                <RequireFullProfile>
+                  <Saved />
+                </RequireFullProfile>
+              }
+            />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

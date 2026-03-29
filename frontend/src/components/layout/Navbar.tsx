@@ -29,7 +29,7 @@ const Navbar = () => {
   return (
     <nav
       className={cn(
-        'sticky top-0 z-50 bg-card/80 backdrop-blur-md border-b border-border',
+        'sticky top-0 z-[60] bg-card/80 backdrop-blur-md border-b border-border',
         'pt-[max(0px,env(safe-area-inset-top))]',
       )}
     >
