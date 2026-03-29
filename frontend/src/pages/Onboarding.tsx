@@ -18,7 +18,7 @@ import {
 import { maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
 import {
   DEFAULT_SPECIALTY_ID,
-  SPECIALTY_PLUGINS,
+  SPECIALTY_SELECT_OPTIONS,
   getSpecialtyPlugin,
 } from '@/lib/specialties';
 
@@ -277,9 +277,9 @@ const Onboarding = () => {
                   <SelectValue placeholder="Select a specialty" />
                 </SelectTrigger>
                 <SelectContent>
-                  {SPECIALTY_PLUGINS.map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.label}
+                  {SPECIALTY_SELECT_OPTIONS.map(opt => (
+                    <SelectItem key={opt.id} value={opt.id} disabled={!opt.available}>
+                      {opt.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { UserProfile, InsuranceProfile } from '@/types';
+import { clearAllGiContinuityForLogout } from '@/lib/giContinuity';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -50,13 +51,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = useCallback(() => {
-    setState({
-      isAuthenticated: false,
-      user: null,
-      profile: null,
-      insurance: null,
-      onboardingComplete: false,
-      intakePayload: null,
+    setState(s => {
+      clearAllGiContinuityForLogout(s.user?.email);
+      return {
+        isAuthenticated: false,
+        user: null,
+        profile: null,
+        insurance: null,
+        onboardingComplete: false,
+        intakePayload: null,
+      };
     });
   }, []);
 
