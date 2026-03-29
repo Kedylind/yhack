@@ -71,9 +71,17 @@ const MapPage = () => {
   useEffect(() => {
     if (selectedCrt) return;
     if (typeof intakePayload?.cpt_code === 'string' && intakePayload.cpt_code) {
+      // Try GI procedures first
       const match = EGD_PROCEDURES.find(p => p.cpt === intakePayload.cpt_code);
       if (match) {
         setSelectedCrt({ cpt: match.cpt, label: match.label, bundleId: match.bundleId });
+      } else {
+        // Non-GI specialty (e.g., Dermatology) — use onboarding data directly
+        setSelectedCrt({
+          cpt: intakePayload.cpt_code as string,
+          label: (intakePayload.procedure_label as string) ?? intakePayload.cpt_code as string,
+          bundleId: (intakePayload.bundle_id as string) ?? intakePayload.cpt_code as string,
+        });
       }
     }
   }, [intakePayload, selectedCrt]);
@@ -91,9 +99,11 @@ const MapPage = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
 
+  const selectedSpecialty = (intakePayload?.specialty as string) || (intakePayload?.care_focus as string) || 'Gastroenterology';
+
   const providersQuery = useQuery({
-    queryKey: ['providers'],
-    queryFn: () => fetchProviders({ specialty: 'Gastroenterology' }),
+    queryKey: ['providers', selectedSpecialty],
+    queryFn: () => fetchProviders({ specialty: selectedSpecialty }),
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: 'always',
@@ -101,8 +111,8 @@ const MapPage = () => {
   });
 
   const hospitalsQuery = useQuery({
-    queryKey: ['hospitals', selectedCrt?.cpt],
-    queryFn: () => fetchHospitals(selectedCrt!.cpt),
+    queryKey: ['hospitals', selectedCrt?.cpt, selectedSpecialty],
+    queryFn: () => fetchHospitals(selectedCrt!.cpt, selectedSpecialty),
     enabled: selectedCrt !== null,
     staleTime: 0,
     gcTime: 0,
