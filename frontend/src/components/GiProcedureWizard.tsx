@@ -185,6 +185,9 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
         if (msg.includes('503')) {
           msg = 'AI is not available. Try the guided questions below.';
         }
+        if (msg.includes('502')) {
+          msg = 'AI had a brief issue. Please try again or use the guided questions below.';
+        }
         setSymptomError(msg);
         setSessionMessages(nextMessages);
         return false;
@@ -262,6 +265,9 @@ const GiProcedureWizard = ({ value, onChange, symptomNotes, onSymptomNotesChange
       let msg = e instanceof Error ? e.message : 'Could not get a suggestion.';
       if (msg.includes('503')) {
         msg = 'AI assistant is not available. Use the options below to continue—the tree stays the same.';
+      }
+      if (msg.includes('502')) {
+        msg = 'AI had a brief issue. Try again or use the options below—the tree stays the same.';
       }
       setAiError(msg);
     } finally {
