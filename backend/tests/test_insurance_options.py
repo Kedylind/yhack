@@ -16,6 +16,7 @@ def test_insurance_options_empty_collection(db):
     out = build_insurance_options(db)
     assert out["insurers"] == []
     assert out["bcbs_plan_options"] == []
+    assert out["plan_options_by_insurer"] == {}
 
 
 def test_insurance_options_from_rates(db):
@@ -28,6 +29,7 @@ def test_insurance_options_from_rates(db):
                 "bcbs_price": 100.0,
                 "aetna_price": 200.0,
                 "bcbs_plan": " HMO Blue ",
+                "aetna_plan": "Open Access",
             },
             {
                 "_id": "bmc:45380",
@@ -36,6 +38,8 @@ def test_insurance_options_from_rates(db):
                 "harvard_pilgrim_price": 50.0,
                 "uhc_price": 75.0,
                 "bcbs_plan": "PPO Blue",
+                "aetna_plan": "Managed Choice",
+                "uhc_plan": "Choice Plus",
             },
         ]
     )
@@ -43,3 +47,7 @@ def test_insurance_options_from_rates(db):
     keys = {i["key"] for i in out["insurers"]}
     assert keys == {"bcbs", "aetna", "harvard_pilgrim", "uhc"}
     assert out["bcbs_plan_options"] == ["HMO Blue", "PPO Blue"]
+    assert out["plan_options_by_insurer"]["bcbs"] == ["HMO Blue", "PPO Blue"]
+    assert out["plan_options_by_insurer"]["aetna"] == ["Managed Choice", "Open Access"]
+    assert out["plan_options_by_insurer"]["harvard_pilgrim"] == []
+    assert out["plan_options_by_insurer"]["uhc"] == ["Choice Plus"]

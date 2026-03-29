@@ -22,6 +22,14 @@ PRICE_FIELD_KEYS: tuple[tuple[str, str], ...] = (
     ("uhc_price", "uhc"),
 )
 
+# Distinct plan-name fields in `hospital_rates` (optional columns; may be empty for payers other than BCBS).
+PLAN_FIELD_BY_INSURER_KEY: dict[str, str] = {
+    "bcbs": "bcbs_plan",
+    "aetna": "aetna_plan",
+    "harvard_pilgrim": "harvard_pilgrim_plan",
+    "uhc": "uhc_plan",
+}
+
 
 def _field_has_positive_rate(col: Any, field: str) -> bool:
     doc = col.find_one({field: {"$gt": 0}})
@@ -48,9 +56,20 @@ def build_insurance_options(db: Database) -> dict[str, Any]:
             }
         )
 
-    raw_plans = col.distinct("bcbs_plan")
-    bcbs_plans = sorted(
-        {str(p).strip() for p in raw_plans if p is not None and str(p).strip()}
-    )
+    plan_options_by_insurer: dict[str, list[str]] = {}
+    for ins in insurers:
+        key = ins["key"]
+        field = PLAN_FIELD_BY_INSURER_KEY.get(key)
+        if not field:
+            continue
+        raw_plans = col.distinct(field)
+        plan_options_by_insurer[key] = sorted(
+            {str(p).strip() for p in raw_plans if p is not None and str(p).strip()}
+        )
 
-    return {"insurers": insurers, "bcbs_plan_options": bcbs_plans}
+    bcbs_plans = plan_options_by_insurer.get("bcbs", [])
+    return {
+        "insurers": insurers,
+        "bcbs_plan_options": bcbs_plans,
+        "plan_options_by_insurer": plan_options_by_insurer,
+    }

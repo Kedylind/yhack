@@ -6,9 +6,13 @@ import { isAuth0Configured } from '@/config/auth';
 import {
   fetchUserMe,
   insuranceProfileFromApi,
+  insuranceProfileToApi,
+  patchUserMe,
   setApiAccessTokenGetter,
   userProfileFromApi,
+  userProfileToApi,
 } from '@/api/client';
+import { isInsuranceProfileComplete, isUserProfileComplete } from '@/lib/profileComplete';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -21,6 +25,8 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
+  /** Auth0: false until first `/users/me` finishes after login. Legacy: always true. */
+  meReady: boolean;
   /** Auth0: redirect to Universal Login. Legacy: stub sign-in (email/password ignored for password). */
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
@@ -50,6 +56,8 @@ const initialState: AuthState = {
 
 function LegacyAuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>(initialState);
+
+  const meReady = true;
 
   const login = useCallback(async (email: string, _password: string) => {
     setState(s => ({ ...s, isAuthenticated: true, user: { email } }));
@@ -86,9 +94,10 @@ function LegacyAuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         ...state,
+        meReady,
         login,
-        signup,
         logout,
+        signup,
         setProfile,
         setInsurance,
         setIntakePayload,
@@ -109,6 +118,7 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
     ...initialState,
     isAuthenticated: false,
   });
+  const [meReady, setMeReady] = useState(false);
 
   useEffect(() => {
     setState(s => ({ ...s, isAuthenticated }));
@@ -131,14 +141,31 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
   }, [getAccessTokenSilently, audience]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      setMeReady(true);
+      return;
+    }
+    setMeReady(false);
     let cancelled = false;
     (async () => {
       try {
         const me = await fetchUserMe();
         if (cancelled) return;
-        const up = userProfileFromApi(me.user_profile ?? undefined);
+        let up = userProfileFromApi(me.user_profile ?? undefined);
         const ins = insuranceProfileFromApi(me.insurance_profile ?? undefined);
+        if (
+          up &&
+          ins &&
+          isUserProfileComplete(up) &&
+          isInsuranceProfileComplete(ins) &&
+          up.onboardingCompleted !== true
+        ) {
+          up = { ...up, onboardingCompleted: true };
+          void patchUserMe({
+            user_profile: userProfileToApi(up),
+            insurance_profile: insuranceProfileToApi(ins),
+          }).catch(() => {});
+        }
         setState(s => ({
           ...s,
           profile: up ?? s.profile,
@@ -146,6 +173,8 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
         }));
       } catch {
         /* offline or API not configured */
+      } finally {
+        if (!cancelled) setMeReady(true);
       }
     })();
     return () => {
@@ -195,6 +224,7 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         ...state,
+        meReady,
         login,
         signup,
         logout,

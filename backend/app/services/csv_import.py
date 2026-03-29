@@ -287,8 +287,11 @@ def import_hospital_rates_csv(db: Database, path: Path) -> int:
             "bcbs_plan": row.get("bcbs_plan", "").strip(),
             "aetna_price": _parse_float_cell(row.get("aetna_price", "")),
             "aetna_source": row.get("aetna_source", "").strip(),
+            "aetna_plan": row.get("aetna_plan", "").strip(),
             "harvard_pilgrim_price": _parse_float_cell(row.get("harvard_pilgrim_price", "")),
+            "harvard_pilgrim_plan": row.get("harvard_pilgrim_plan", "").strip(),
             "uhc_price": _parse_float_cell(row.get("uhc_price", "")),
+            "uhc_plan": row.get("uhc_plan", "").strip(),
             "bcbs_tic_rate": _parse_float_cell(row.get("bcbs_tic_rate", "")),
             "source": "az_mvp",
         }

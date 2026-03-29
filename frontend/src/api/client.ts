@@ -45,12 +45,14 @@ export type UserMeApi = {
 };
 
 export function userProfileToApi(p: UserProfile): Record<string, unknown> {
-  return {
+  const o: Record<string, unknown> = {
     fullName: p.fullName,
     dob: p.dob,
     zip: p.zip,
     phone: p.phone,
   };
+  if (p.onboardingCompleted != null) o.onboarding_completed = p.onboardingCompleted;
+  return o;
 }
 
 export function insuranceProfileToApi(p: InsuranceProfile): Record<string, unknown> {
@@ -73,6 +75,8 @@ export function userProfileFromApi(raw: Record<string, unknown> | null | undefin
     dob: raw.dob ? String(raw.dob) : undefined,
     zip: String(raw.zip ?? ''),
     phone: raw.phone ? String(raw.phone) : undefined,
+    onboardingCompleted:
+      typeof raw.onboarding_completed === 'boolean' ? raw.onboarding_completed : undefined,
   };
 }
 
@@ -200,6 +204,8 @@ export type InsurerOptionApi = {
 export type InsuranceOptionsApi = {
   insurers: InsurerOptionApi[];
   bcbs_plan_options: string[];
+  /** Distinct plan strings per insurer key (from Mongo hospital_rates). May be empty for payers without plan columns. */
+  plan_options_by_insurer: Record<string, string[]>;
 };
 
 export async function fetchInsuranceOptions(): Promise<InsuranceOptionsApi> {
