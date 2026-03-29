@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import { isAuth0Configured } from '@/config/auth';
 
 const Settings = () => {
   const { profile, insurance, setProfile, setInsurance } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState(profile?.fullName || '');
   const [zip, setZip] = useState(profile?.zip || '');
   const [phone, setPhone] = useState(profile?.phone || '');
@@ -95,6 +97,12 @@ const Settings = () => {
             </div>
           </div>
         </section>
+
+        <div className="flex gap-3">
+          <Button type="button" variant="outline" className="flex-1" onClick={() => navigate('/map')}>
+            Not now — view map
+          </Button>
+        </div>
 
         <Button className="w-full bg-primary text-primary-foreground hover:bg-primary-hover h-11" onClick={save}>
           Save changes

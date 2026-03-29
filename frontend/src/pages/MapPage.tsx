@@ -212,7 +212,8 @@ const MapPage = () => {
   const toggleHospital = (name: string) => {
     setCollapsedHospitals(s => {
       const next = new Set(s);
-      next.has(name) ? next.delete(name) : next.add(name);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
       return next;
     });
   };
@@ -282,7 +283,8 @@ const MapPage = () => {
   const toggleSave = (id: string) => {
     setSavedIds(s => {
       const next = new Set(s);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -300,6 +302,11 @@ const MapPage = () => {
       <ProcedureGateDialog
         open={selectedCrt === null}
         onComplete={sel => setSelectedCrt(sel)}
+        onDismiss={() => {
+          const first = giLeafOptions[0];
+          if (!first) return;
+          setSelectedCrt({ cpt: first.cptCode, label: first.title, bundleId: first.bundleId });
+        }}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
