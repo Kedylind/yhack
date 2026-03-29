@@ -1,0 +1,3 @@
+# Railway/Nixpacks: use npm + package-lock.json (no Bun frozen-lockfile failures)
+[phases.install]
+cmds = ["npm ci"]
