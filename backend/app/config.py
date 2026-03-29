@@ -1,6 +1,6 @@
-from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Always load backend/.env regardless of cwd (uvicorn from repo root vs backend/)
@@ -44,10 +44,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @field_validator("lava_api_key", mode="before")
+    @classmethod
+    def strip_lava_api_key(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
-@lru_cache
 def get_settings() -> Settings:
+    """Fresh Settings each call so edits to backend/.env apply without relying on process cache."""
     return Settings()

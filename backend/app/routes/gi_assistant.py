@@ -29,7 +29,10 @@ def symptom_refine(body: GiSymptomRefineBody) -> GiSymptomRefineResponse:
         )
     except RuntimeError as e:
         if "LAVA_API_KEY" in str(e):
-            raise HTTPException(status_code=503, detail="AI assistant is not configured") from e
+            raise HTTPException(
+                status_code=503,
+                detail="AI assistant is not configured. Add LAVA_API_KEY to backend/.env (see .env.example).",
+            ) from e
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -62,5 +65,8 @@ def suggest_next(body: GiAssistantSuggestBody) -> GiNextSuggestion:
         )
     except RuntimeError as e:
         if "LAVA_API_KEY" in str(e):
-            raise HTTPException(status_code=503, detail="AI assistant is not configured") from e
+            raise HTTPException(
+                status_code=503,
+                detail="AI assistant is not configured. Add LAVA_API_KEY to backend/.env (see .env.example).",
+            ) from e
         raise HTTPException(status_code=500, detail=str(e)) from e

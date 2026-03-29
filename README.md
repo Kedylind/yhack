@@ -20,6 +20,31 @@ Provenance-first healthcare shopping demo for **Boston**, **Gastroenterology**, 
 | `LLM_MODEL` | OpenAI-compatible model name when using a live key |
 | `CORS_ORIGINS` | Comma-separated origins for the browser app |
 
+### GI assistant — Lava API key (Gemini)
+
+The onboarding/map **symptom conversation** and **GI path helper** call **Google Gemini** through **[Lava](https://lava.so)**’s OpenAI-compatible API (`/v1/chat/completions`). Without a key, those endpoints return **503** and the UI falls back to manual questions only.
+
+1. Create a Lava account and generate an API key (Bearer token, often prefixed `aks_live_…`).
+2. Copy the template and add your secret locally (**never commit** `backend/.env`):
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+3. Set at minimum:
+
+   | Variable | Description |
+   |----------|-------------|
+   | `LAVA_API_KEY` | **Required** for GI AI features |
+   | `LAVA_API_BASE_URL` | Default `https://api.lava.so/v1` |
+   | `LAVA_GEMINI_MODEL` | Gemini model id Lava routes for you (e.g. `gemini-2.0-flash`) |
+
+4. Restart the API after changing `.env`. Confirm with:
+
+   `GET http://127.0.0.1:8000/api/health` → `"lava_configured": true`.
+
+For **production**, set the same variables as secrets on your host (Railway, Fly, etc.). The frontend does not need the key; only the backend calls Lava.
+
 ### Frontend (build-time)
 
 | Variable | Description |
@@ -55,7 +80,7 @@ pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Health: `GET http://127.0.0.1:8000/api/health`
+Health: `GET http://127.0.0.1:8000/api/health` (includes `lava_configured` for the GI assistant).
 
 ### 3. Run the frontend
 
@@ -83,7 +108,9 @@ npm test
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/health` | Health check |
+| GET | `/api/health` | Health check (`lava_configured` reflects `LAVA_API_KEY`) |
+| POST | `/api/gi-assistant/symptom-refine` | Symptom → Gemini → GI CPT leaf suggestion |
+| POST | `/api/gi-assistant/suggest-next` | Suggest next decision-tree branch (requires `LAVA_API_KEY`) |
 | POST | `/api/intake` | Validate and normalize intake; returns `missing_required` |
 | POST | `/api/confirm` | LLM-assisted follow-ups (mocked without `LLM_API_KEY`) |
 | POST | `/api/confirm/apply` | Merge answers; `ready_for_estimate` |
@@ -102,7 +129,7 @@ Starts MongoDB and the API; import data separately with `import_csv_to_mongo.py`
 ## Railway
 
 1. Create a **MongoDB** plugin (or Atlas) and set `MONGODB_URI`.
-2. Deploy the **backend** from `backend/` (Dockerfile) with `CORS_ORIGINS` set to your static site origin.
+2. Deploy the **backend** from `backend/` (Dockerfile) with `CORS_ORIGINS` set to your static site origin. Add **`LAVA_API_KEY`**, **`LAVA_API_BASE_URL`**, and **`LAVA_GEMINI_MODEL`** as secrets if you want the GI AI features in production.
 3. Build the **frontend** with `VITE_API_BASE_URL` = your API URL; host `frontend/dist` as a static site or serve behind the same origin.
 
 ## Disclaimer

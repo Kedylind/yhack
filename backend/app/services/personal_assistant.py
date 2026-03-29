@@ -43,15 +43,30 @@ def lava_chat_completion(
     }
     if max_tokens is not None:
         body["max_tokens"] = max_tokens
-    with httpx.Client(timeout=120.0) as client:
-        r = client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {settings.lava_api_key}",
-                "Content-Type": "application/json",
-            },
-            json=body,
-        )
-        r.raise_for_status()
-        data = r.json()
+    try:
+        with httpx.Client(timeout=120.0) as client:
+            r = client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {settings.lava_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+            r.raise_for_status()
+            data = r.json()
+    except httpx.HTTPStatusError as e:
+        code = e.response.status_code
+        snippet = ""
+        try:
+            snippet = (e.response.text or "")[:200]
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"Lava HTTP {code} (check LAVA_API_KEY and LAVA_GEMINI_MODEL in backend/.env). {snippet}".strip()
+        ) from e
+    except httpx.RequestError as e:
+        raise RuntimeError(
+            f"Cannot reach Lava at {base} — check network and LAVA_API_BASE_URL. ({e})"
+        ) from e
     return str(data["choices"][0]["message"]["content"])
