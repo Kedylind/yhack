@@ -88,6 +88,7 @@ const MapPage = () => {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [showList, setShowList] = useState(false);
   const [collapsedHospitals, setCollapsedHospitals] = useState<Set<string>>(new Set());
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [scrollToHospital, setScrollToHospital] = useState<string | null>(null);
   const hospitalRefsMap = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -484,9 +485,17 @@ const MapPage = () => {
                           <span className="text-xs text-muted-foreground italic">Price not disclosed</span>
                         )}
                         {hospitalOop ? (
-                          <span className="text-xs text-primary ml-2">
+                          <span className="text-xs text-primary ml-2 inline-flex items-center gap-0.5">
                             {hospitalOop.ruleType === 'preventive' ? (
-                              <>$0 <span className="bg-green-50 text-green-700 px-1 rounded text-[10px]">ACA preventive</span></>
+                              <>
+                                $0 <span className="bg-green-50 text-green-700 px-1 rounded text-[10px]">ACA preventive</span>
+                                <Tooltip>
+                                  <TooltipTrigger asChild><Info className="w-3 h-3 inline" /></TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-xs text-xs">
+                                    <p>Insurer pays ${hospitalPayerPrice != null ? Math.round(hospitalPayerPrice).toLocaleString() : '—'} · You pay $0. Preventive screening colonoscopy is covered at 100% under ACA with no cost-sharing. If a polyp is found, the plan may reclassify as diagnostic.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </>
                             ) : hospitalOop.ruleType === 'copay_only' ? (
                               <>Copay ${hospitalOop.estimate}</>
                             ) : (
@@ -522,21 +531,38 @@ const MapPage = () => {
                             Price range was not disclosed by this facility
                           </div>
                         )}
-                        {/* Mini price sources at hospital level */}
+                        {/* Collapsible price sources at hospital level */}
                         {hData && (() => {
                           const sources = getAllPriceSources(hData, insuranceCarrierLabel);
                           if (sources.length === 0) return null;
+                          const isSourcesOpen = expandedSources.has(hospitalName);
                           return (
-                            <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs space-y-0.5">
-                              <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Price sources</p>
-                              {sources.slice(0, 3).map((src, i) => (
-                                <div key={i} className="flex justify-between">
-                                  <span className="text-muted-foreground">{src.label}</span>
-                                  <span className="font-medium">${Math.round(src.price).toLocaleString()}</span>
+                            <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedSources(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(hospitalName)) next.delete(hospitalName);
+                                    else next.add(hospitalName);
+                                    return next;
+                                  });
+                                }}
+                                className="flex items-center gap-1 font-semibold text-muted-foreground uppercase tracking-wider text-[10px] hover:text-foreground transition-colors w-full"
+                              >
+                                {isSourcesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                Price sources ({sources.length})
+                              </button>
+                              {isSourcesOpen && (
+                                <div className="mt-1 space-y-0.5 max-h-[200px] overflow-y-auto">
+                                  {sources.map((src, i) => (
+                                    <div key={i} className="flex justify-between">
+                                      <span className="text-muted-foreground">{src.label}</span>
+                                      <span className="font-medium">${Math.round(src.price).toLocaleString()}</span>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                              {sources.length > 3 && (
-                                <p className="text-muted-foreground italic">+{sources.length - 3} more sources</p>
                               )}
                             </div>
                           );

@@ -235,7 +235,9 @@ const ProviderCard = ({
                 )}
                 <p className="text-xs text-muted-foreground mt-2 flex items-start gap-1">
                   <Info className="w-3 h-3 mt-0.5 shrink-0" />
-                  {oop.explanation}
+                  {oop.ruleType === 'preventive' && hospitalPayerPrice != null
+                    ? `Insurer pays $${Math.round(hospitalPayerPrice).toLocaleString()} · You pay $0. ${oop.explanation} If a polyp is found, the plan may reclassify as diagnostic.`
+                    : oop.explanation}
                 </p>
               </>
             );
