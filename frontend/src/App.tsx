@@ -7,6 +7,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import AuthCallback from "./pages/AuthCallback";
 import Onboarding from "./pages/Onboarding";
 import MapPage from "./pages/MapPage";
 import Saved from "./pages/Saved";
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/team" element={<Team />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/callback" element={<AuthCallback />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/map" element={<MapPage />} />
             <Route path="/saved" element={<Saved />} />

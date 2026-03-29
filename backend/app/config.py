@@ -23,11 +23,11 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
 
-    # Lava (https://lava.so): OpenAI-compatible gateway; set LAVA_GEMINI_MODEL to a Gemini id Lava routes (e.g. gemini-2.0-flash).
+    # Lava (https://lava.so): OpenAI-compatible gateway; set LAVA_GEMINI_MODEL to a Gemini id Lava routes (e.g. gemini-2.5-flash).
     # Store only in environment / host secrets — never commit real keys.
     lava_api_key: str = ""
     lava_api_base_url: str = "https://api.lava.so/v1"
-    lava_gemini_model: str = "gemini-2.0-flash"
+    lava_gemini_model: str = "gemini-2.5-flash"
 
     cors_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"

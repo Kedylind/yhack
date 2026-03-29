@@ -72,7 +72,10 @@ We hope we did. It doesn’t have to be sci-fi “mind-blowing”; sadly, **cari
 | `MONGODB_DB_NAME` | Database name (default `boston_gi_demo`) |
 | `LLM_API_KEY` | Optional; if unset, `/api/confirm` uses a deterministic fake LLM in tests |
 | `LLM_MODEL` | OpenAI-compatible model name when using a live key |
-| `CORS_ORIGINS` | Comma-separated origins for the browser app |
+| `CORS_ORIGINS` | Comma-separated origins for the browser app (no trailing slash on each origin; include your Railway frontend URL in production) |
+| `AUTH0_DOMAIN` | Auth0 tenant domain (e.g. `dev-xxx.us.auth0.com`) |
+| `AUTH0_AUDIENCE` | API identifier from Auth0 **APIs** (must match the SPA `audience` / access token `aud` claim) |
+| `AUTH0_ISSUER` | Issuer URL, must match JWT `iss` (typically `https://YOUR_AUTH0_DOMAIN/`) |
 
 ### GI assistant — Lava API key (Gemini)
 
@@ -91,7 +94,7 @@ The onboarding/map **symptom conversation** and **GI path helper** call **Google
    |----------|-------------|
    | `LAVA_API_KEY` | **Required** for GI AI features |
    | `LAVA_API_BASE_URL` | Default `https://api.lava.so/v1` |
-   | `LAVA_GEMINI_MODEL` | Gemini model id Lava routes for you (e.g. `gemini-2.0-flash`) |
+   | `LAVA_GEMINI_MODEL` | Gemini model id Lava routes for you (default `gemini-2.5-flash`) |
 
 4. Restart the API after changing `.env`. Confirm with:
 
@@ -104,6 +107,11 @@ For **production**, set the same variables as secrets on your host (Railway, Fly
 | Variable | Description |
 |----------|-------------|
 | `VITE_API_BASE_URL` | Public API origin (e.g. `https://your-api.up.railway.app`). For local dev, leave empty and use the Vite proxy to `http://127.0.0.1:8000`. |
+| `VITE_AUTH0_DOMAIN` | Auth0 tenant domain (SPA application) |
+| `VITE_AUTH0_CLIENT_ID` | Auth0 SPA client ID |
+| `VITE_AUTH0_AUDIENCE` | Same identifier as `AUTH0_AUDIENCE` on the API (access token audience) |
+
+Set `VITE_*` variables **before** `npm run build` on Railway so Vite embeds them. Redeploy the frontend after changing them.
 
 ## Local development
 

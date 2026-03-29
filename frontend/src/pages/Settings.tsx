@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/context/AuthContext';
 import type { InsuranceProfile } from '@/types';
 import { toast } from 'sonner';
+import { insuranceProfileToApi, patchUserMe, userProfileToApi } from '@/api/client';
+import { isAuth0Configured } from '@/config/auth';
 
 const Settings = () => {
   const { profile, insurance, setProfile, setInsurance } = useAuth();
@@ -24,10 +26,31 @@ const Settings = () => {
   const [copay, setCopay] = useState(insurance?.copay || 0);
   const [coinsurance, setCoinsurance] = useState(insurance?.coinsurance || 0);
 
-  const save = () => {
-    setProfile({ fullName: name, zip, phone, dob });
-    setInsurance({ carrier, planName, memberId, planType, deductible, oopMax, copay, coinsurance });
-    // TODO: PATCH to API_BASE_URL/profile
+  const save = async () => {
+    const nextProfile = { fullName: name, zip, phone, dob };
+    const nextInsurance = {
+      carrier,
+      planName,
+      memberId,
+      planType,
+      deductible,
+      oopMax,
+      copay,
+      coinsurance,
+    };
+    setProfile(nextProfile);
+    setInsurance(nextInsurance);
+    if (isAuth0Configured()) {
+      try {
+        await patchUserMe({
+          user_profile: userProfileToApi(nextProfile),
+          insurance_profile: insuranceProfileToApi(nextInsurance),
+        });
+      } catch {
+        toast.error('Could not sync profile to the server');
+        return;
+      }
+    }
     toast.success('Profile updated');
   };
 

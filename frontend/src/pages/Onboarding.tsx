@@ -9,7 +9,13 @@ import Stepper from '@/components/Stepper';
 import Navbar from '@/components/layout/Navbar';
 import type { UserProfile, InsuranceProfile } from '@/types';
 import { CheckCircle2 } from 'lucide-react';
-import { postIntake } from '@/api/client';
+import {
+  insuranceProfileToApi,
+  patchUserMe,
+  postIntake,
+  userProfileToApi,
+} from '@/api/client';
+import { isAuth0Configured } from '@/config/auth';
 import {
   BCBS_PLAN_OPTIONS,
   INSURERS_FROM_RATES,
@@ -66,6 +72,17 @@ const Onboarding = () => {
     if (!plugin || !plugin.isProcedureComplete(procedureSelection)) return;
     saveProfile(profile);
     saveInsurance(insurance);
+
+    if (isAuth0Configured()) {
+      try {
+        await patchUserMe({
+          user_profile: userProfileToApi(profile),
+          insurance_profile: insuranceProfileToApi(insurance),
+        });
+      } catch {
+        /* offline or API */
+      }
+    }
 
     const intake: Record<string, unknown> = {
       full_name: profile.fullName,
