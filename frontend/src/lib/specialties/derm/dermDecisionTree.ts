@@ -163,3 +163,8 @@ export const DERM_PROCEDURE_NODES: Record<string, DermTreeNode> = {
     description: 'Mohs micrographic surgery, first stage (trunk/arms/legs). Additional stages billed separately.',
   },
 };
+
+/** All derm leaf procedures for the procedure filter dropdown. */
+export const DERM_PROCEDURES: { cpt: string; label: string; bundleId: string }[] = Object.values(DERM_TREE)
+  .filter((n): n is DermLeafNode => n.kind === 'leaf')
+  .map(n => ({ cpt: n.cptCode, label: n.title, bundleId: n.bundleId }));

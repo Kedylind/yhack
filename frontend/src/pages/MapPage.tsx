@@ -6,6 +6,7 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import ProviderCard from '@/components/providers/ProviderCard';
 import CrtSelectionDialog, { EGD_PROCEDURES } from '@/components/CrtSelectionDialog';
+import { DERM_PROCEDURES } from '@/lib/specialties/derm/dermDecisionTree';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -427,15 +428,39 @@ const MapPage = () => {
               </Select>
             </div>
             )}
-            {selectedSpecialty !== 'Gastroenterology' && selectedCrt && (
-              <div className="flex items-center justify-between text-sm bg-muted/50 rounded-md px-3 py-2">
-                <div>
-                  <span className="text-muted-foreground">{selectedCrt.label}</span>
-                  <span className="text-xs text-muted-foreground ml-1">(CPT {selectedCrt.cpt})</span>
-                </div>
-                <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => navigate('/onboarding')}>
-                  Change
-                </Button>
+            {selectedSpecialty === 'Dermatology' && (
+            <div className="flex items-center gap-2">
+              <Select
+                value={selectedCrt?.cpt ?? ''}
+                onValueChange={(val) => {
+                  const proc = DERM_PROCEDURES.find(p => p.cpt === val);
+                  if (proc) setSelectedCrt({ cpt: proc.cpt, label: proc.label, bundleId: proc.bundleId });
+                }}
+              >
+                <SelectTrigger className="w-full text-sm">
+                  <SelectValue placeholder="Select procedure" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Dermatology</SelectLabel>
+                    {selectedCrt && !DERM_PROCEDURES.some(p => p.cpt === selectedCrt.cpt) && (
+                      <SelectItem key={selectedCrt.cpt} value={selectedCrt.cpt}>
+                        {selectedCrt.label} (CPT {selectedCrt.cpt})
+                      </SelectItem>
+                    )}
+                    {DERM_PROCEDURES.map(p => (
+                      <SelectItem key={p.cpt} value={p.cpt}>
+                        {p.label} (CPT {p.cpt})
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            )}
+            {selectedSpecialty !== 'Gastroenterology' && selectedSpecialty !== 'Dermatology' && selectedCrt && (
+              <div className="text-sm text-muted-foreground px-2 py-1 bg-muted/50 rounded-md">
+                {selectedCrt.label} (CPT {selectedCrt.cpt})
               </div>
             )}
           </div>
