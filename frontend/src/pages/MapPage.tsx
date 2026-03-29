@@ -290,9 +290,10 @@ const MapPage = () => {
           rangeText,
         )
         .on('click', () => {
-          // Collapse all, expand only this one, scroll to it
+          // Collapse all (including Independent Providers), expand only this one, scroll to it
           setCollapsedHospitals(() => {
             const allCollapsed = new Set(hospitals.map(x => x.name));
+            allCollapsed.add('Independent Providers');
             allCollapsed.delete(h.name);
             return allCollapsed;
           });
