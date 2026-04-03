@@ -58,21 +58,27 @@ We hope we did. It doesn’t have to be sci-fi “mind-blowing”; sadly, **cari
 
 ## Prerequisites
 
-- Python 3.11+
-- Node 18+
-- PostgreSQL 14+ (local or Docker), or Railway Postgres in deployment
+- **Python 3.11+** (matches `backend` Docker image and CI)
+- **Node 20+** (used in GitHub Actions; Node 18 often works)
+- **PostgreSQL 14+** locally, **Docker Compose** (`postgres:16`), or **Railway Postgres** in deployment
 
 ## Environment variables
+
+Settings are loaded from **`backend/.env`** (see `backend/app/config.py`). Names below match what you set in the shell or `.env` (Pydantic accepts the usual `UPPER_SNAKE` forms).
 
 ### Backend (`backend/.env` or process env)
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | PostgreSQL URL (SQLAlchemy format, e.g. `postgresql+psycopg2://user:pass@host:5432/dbname`) |
-| `JWT_SECRET_KEY` | Secret for signing HS256 access tokens (use a long random value in production) |
-| `LLM_API_KEY` | Optional; if unset, `/api/confirm` uses a deterministic fake LLM in tests |
-| `LLM_MODEL` | OpenAI-compatible model name when using a live key |
-| `CORS_ORIGINS` | Comma-separated origins for the browser app (no trailing slash on each origin; include your Railway frontend URL in production) |
+| `DATABASE_URL` | PostgreSQL URL (SQLAlchemy + psycopg2), e.g. `postgresql+psycopg2://user:pass@host:5432/dbname` |
+| `JWT_SECRET_KEY` | Secret for signing HS256 access tokens (**use a long random value in production**) |
+| `JWT_ISSUER` | Optional; default `carecost-api` |
+| `JWT_ACCESS_TTL_MINUTES` | Optional; access token lifetime (default `60`) |
+| `LLM_API_KEY` | Optional; if unset, `/api/confirm` uses a deterministic fake LLM |
+| `LLM_MODEL` | OpenAI-compatible model name when using a live key (default `gpt-4o-mini`) |
+| `CORS_ORIGINS` | Comma-separated browser origins (**no trailing slash**); must include your Vite dev origin (`http://localhost:8080`) and production frontend URL |
+| `SAMPLES_DIR` / `AZ_DATA_DIR` | Optional overrides for CSV paths (defaults: `../data/samples`, `../data/az-data` relative to `backend/`) |
+| `TEST_DATABASE_URL` | **Tests only:** PostgreSQL URL for pytest (default `…/carecost_test`); see `backend/tests/conftest.py` |
 
 ### GI assistant — Lava API key (Gemini)
 
@@ -97,23 +103,31 @@ The onboarding/map **symptom conversation** and **GI path helper** call **Google
 
    `GET http://127.0.0.1:8000/api/health` → `"lava_configured": true`.
 
-For **production**, set the same variables as secrets on your host (Railway, Fly, etc.). The frontend does not need the key; only the backend calls Lava.
+For **production**, set the same variables as secrets on your host (e.g. Railway). The frontend does not need the key; only the backend calls Lava.
 
 ### Frontend (build-time)
 
 | Variable | Description |
 |----------|-------------|
-| `VITE_API_BASE_URL` | Public API origin (e.g. `https://your-api.up.railway.app`). For local dev, leave empty and use the Vite proxy to `http://127.0.0.1:8000`. |
+| `VITE_API_BASE_URL` | Public API origin (e.g. `https://your-api.up.railway.app`). For local dev, leave empty: the Vite dev server proxies `/api` to `http://127.0.0.1:8000` (default UI: `http://localhost:8080`). |
 
 Set `VITE_*` variables **before** `npm run build` on Railway so Vite embeds them. Redeploy the frontend after changing them.
 
 ## Local development
 
-The `data/` tree (sample and AZ CSVs) and `docs/` are **gitignored** and are not pushed to GitHub. Keep those folders on your machine (or copy them from teammates / internal storage) before running `scripts/import_csv_to_postgres.py`. **Pytest** uses tracked copies under `backend/tests/fixtures/` so CI does not need repo-root `data/`.
+### Data and docs in Git
+
+The repo-root **`data/`** (sample + AZ CSVs) and **`docs/`** are listed in **`.gitignore`** so they are not committed. Keep those folders locally (or sync them outside Git) before running the import script.
+
+**Automated tests** do not rely on `data/`: pytest uses tracked CSV copies under **`backend/tests/fixtures/`** (see `backend/tests/fixture_paths.py`).
+
+The import CLI also accepts **`DATA_DIR`** (sample CSV folder) and **`AZ_DATA_DIR`** (AZ bundle) if you store files outside the default paths—see `scripts/import_csv_to_postgres.py`.
 
 ### 1. Create schema and seed PostgreSQL from sample CSVs
 
-Ensure PostgreSQL is running and `DATABASE_URL` in `backend/.env` points at it. The first API request or import run that opens the DB creates tables from the ORM models (`create_all`); then import data.
+Ensure PostgreSQL is running and `DATABASE_URL` in `backend/.env` points at it.
+
+Schema: **`Base.metadata.create_all`** runs the first time the app (or import script) obtains a DB engine via **`backend/app/db/postgres.py`**. Models live in **`backend/app/db/tables.py`** (there is no separate Alembic migration step in this repo).
 
 ```powershell
 cd backend
@@ -122,7 +136,7 @@ cd ..
 python scripts/import_csv_to_postgres.py
 ```
 
-Arizona MVP bundle (adds `data/az-data` providers + hospital rates + synthetic prices):
+Arizona MVP bundle (expects `data/az-data` with `providers.csv` and `hospital_rates_clean.csv`, plus seed `procedures.csv` / `insurers.csv` from samples unless you pass `--seed-dir`):
 
 ```powershell
 python scripts/import_csv_to_postgres.py --az-mvp
@@ -136,7 +150,7 @@ pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Health: `GET http://127.0.0.1:8000/api/health` (includes `database_connected` and `lava_configured`).
+Health: `GET http://127.0.0.1:8000/api/health` returns `status` **`ok`** when PostgreSQL is reachable, **`degraded`** otherwise; also includes `database_connected`, `database` (`postgresql`), and `lava_configured` (true when `LAVA_API_KEY` is set).
 
 ### 3. Run the frontend
 
@@ -146,39 +160,47 @@ npm install
 npm run dev
 ```
 
-The Vite dev server proxies `/api` to `http://127.0.0.1:8000` (see `frontend/vite.config.ts`).
+The Vite dev server defaults to **`http://localhost:8080`** and **proxies** `/api` to **`http://127.0.0.1:8000`** (`frontend/vite.config.ts`). For production builds, set `VITE_API_BASE_URL` to your API origin if the UI is not served behind the same host as the API.
 
-### 4. Tests (TDD gate)
+### 4. Tests
 
-Integration tests expect PostgreSQL. Set `TEST_DATABASE_URL` (and `DATABASE_URL`) to a dedicated test database; tests create schema with `create_all`.
+- **Backend:** Integration and DB tests need PostgreSQL. Set `TEST_DATABASE_URL` to a dedicated database (pytest also sets `DATABASE_URL` from it in `conftest.py`). Schema is created with `create_all` for the test engine.
 
 ```powershell
 cd backend
 pytest
 ```
 
+- **Frontend:**
+
 ```powershell
 cd frontend
 npm test
 ```
 
+### 5. Continuous integration
+
+**`.github/workflows/ci.yml`** runs on push and pull requests to `main` / `master`: backend `pytest`, production-requirements smoke import, Docker image build from `backend/`, and frontend `npm ci` + `npm test`.
+
 ## API overview
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/health` | Health check (`database_connected`, `lava_configured`) |
+| GET | `/api/health` | Health (`status`, `database_connected`, `lava_configured`) |
 | POST | `/api/auth/register` | Email + password → JWT |
 | POST | `/api/auth/login` | Email + password → JWT |
 | GET | `/api/users/me` | Current user profiles (Bearer JWT) |
 | PATCH | `/api/users/me` | Update `user_profile` / `insurance_profile` |
-| POST | `/api/gi-assistant/symptom-refine` | Symptom → Gemini → GI CPT leaf suggestion |
-| POST | `/api/gi-assistant/suggest-next` | Suggest next decision-tree branch (requires `LAVA_API_KEY`) |
+| POST | `/api/gi-assistant/symptom-refine` | Symptom interview → GI CPT leaf suggestion (503 if no Lava key) |
+| POST | `/api/gi-assistant/suggest-next` | Suggest next decision-tree branch (503 if no Lava key) |
 | POST | `/api/intake` | Validate and normalize intake; returns `missing_required` |
-| POST | `/api/confirm` | LLM-assisted follow-ups (mocked without `LLM_API_KEY`) |
+| POST | `/api/confirm` | LLM-assisted follow-ups (fake LLM without `LLM_API_KEY`) |
 | POST | `/api/confirm/apply` | Merge answers; `ready_for_estimate` |
 | POST | `/api/estimate` | Scenario → bundle → prices + OOP bands |
-| GET | `/api/providers` | List GI providers (filters: `zip`, `specialty`, `bbox`) |
+| GET | `/api/providers` | List providers (filters: `zip`, `specialty`, `bbox`, etc.) |
 | GET | `/api/providers/{id}` | Provider detail |
+| GET | `/api/hospitals` | Hospitals with coordinates and optional rate fields (`cpt` query, default colonoscopy CPT) |
+| GET | `/api/hospitals/insurance-options` | Insurer / plan options derived from `hospital_rates` |
 
 ## Docker Compose (optional)
 
@@ -186,14 +208,14 @@ npm test
 docker compose up --build
 ```
 
-Starts PostgreSQL and the API. Import data with `python scripts/import_csv_to_postgres.py` using the same `DATABASE_URL` as the API container (`postgresql+psycopg2://postgres:postgres@localhost:5432/carecost` from the host if you expose port 5432).
+Starts **PostgreSQL 16** and the **API** (`Dockerfile` in `backend/`). The API container sets `DATABASE_URL` to the `postgres` service. From the **host**, use `postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/carecost` when running `scripts/import_csv_to_postgres.py` so data lands in the same database. Set **`JWT_SECRET_KEY`** in the environment when composing if you override the default. Optional Lava/GI variables are not set in `docker-compose.yml`—add them if you need those features in containers.
 
 ## Railway
 
-1. Add the **PostgreSQL** plugin and copy `DATABASE_URL` into the backend service.
-2. Set **`JWT_SECRET_KEY`** (long random string) and **`CORS_ORIGINS`** to your frontend origin. Tables are created automatically on first database use (no migration CLI).
-3. Deploy the **backend** from `backend/`. Add **`LAVA_API_KEY`**, **`LAVA_API_BASE_URL`**, and **`LAVA_GEMINI_MODEL`** if you want GI AI features in production.
-4. Build the **frontend** with `VITE_API_BASE_URL` pointing at your API; host `frontend/dist` as a static site.
+1. Add the **PostgreSQL** plugin and set **`DATABASE_URL`** on the backend service.
+2. Set **`JWT_SECRET_KEY`** (long random string) and **`CORS_ORIGINS`** to your deployed frontend origin (exact URL, no trailing slash).
+3. Deploy the **backend** from **`backend/`** (same layout as the Docker image). Schema is created on first DB connection. Add **`LAVA_API_KEY`**, **`LAVA_API_BASE_URL`**, and **`LAVA_GEMINI_MODEL`** for GI assistant endpoints in production.
+4. Build the **frontend** with **`VITE_API_BASE_URL`** set to the public API URL before `npm run build`; serve `frontend/dist` as a static site.
 
 ## Disclaimer
 
