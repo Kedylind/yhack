@@ -1,3 +1,6 @@
-# Railway/Nixpacks: use npm + package-lock.json (no Bun frozen-lockfile failures)
+# Railway/Nixpacks: explicit install + build so a custom install phase never skips Vite.
 [phases.install]
 cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]

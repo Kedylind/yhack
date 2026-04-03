@@ -216,6 +216,18 @@ Starts **PostgreSQL 16** and the **API** (`Dockerfile` in `backend/`). The API c
 2. Set **`JWT_SECRET_KEY`** (long random string) and **`CORS_ORIGINS`** to your deployed frontend origin (exact URL, no trailing slash).
 3. Deploy the **backend** from **`backend/`** (same layout as the Docker image). Schema is created on first DB connection. Add **`LAVA_API_KEY`**, **`LAVA_API_BASE_URL`**, and **`LAVA_GEMINI_MODEL`** for GI assistant endpoints in production.
 4. Build the **frontend** with **`VITE_API_BASE_URL`** set to the public API URL before `npm run build`; serve `frontend/dist` as a static site.
+5. Optional: set **Watch Paths** on each service (e.g. backend `backend/**`, frontend `frontend/**`) so a commit that only touches `README.md` does not trigger unrelated deploys. `frontend/railway.toml` includes `watchPatterns` for the same idea.
+
+### Logs look “broken” but the frontend is fine
+
+Project-level log exports **merge every service** (API, static site, Postgres). **Alembic / migration errors** come from the **API** container only. Lines from **Caddy** (`/Caddyfile`, `server running`) are the **static frontend**—those are normal. Open **one service at a time** in the Railway UI to see which deploy failed.
+
+If you still see **`Path doesn't exist: alembic`**, the API image is an **old build** (before Alembic was removed from the Dockerfile). Redeploy the backend from the latest `main`/`david` and **clear build cache** once.
+
+### Signups, “databases,” and passwords
+
+- Railway gives you **one** Postgres **server** and typically **one database** (often named `railway`). Signing up on the site does **not** create a new database per user.
+- Each registered user is a **row** in the **`users`** table (`backend/app/db/tables.py`). The **password is not stored in plain text**; only a **bcrypt hash** is stored in **`password_hash`**. After login, the browser holds a **JWT** (signed with **`JWT_SECRET_KEY`**); that token is not stored as a row in Postgres by default.
 
 ## Disclaimer
 
