@@ -16,12 +16,15 @@ _session_factory: sessionmaker[Session] | None = None
 def get_engine():
     global _engine, _session_factory
     if _engine is None:
+        from app.db.tables import Base
+
         url = get_settings().database_url
         _engine = create_engine(
             url,
             pool_pre_ping=True,
             echo=False,
         )
+        Base.metadata.create_all(bind=_engine)
         _session_factory = sessionmaker(
             bind=_engine,
             autocommit=False,

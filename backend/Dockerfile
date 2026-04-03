@@ -6,11 +6,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
-COPY alembic.ini alembic ./
 
 ENV PYTHONPATH=/app
 
 EXPOSE 8000
 
-# Railway sets PORT; run migrations then start API
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Railway sets PORT; tables are created on first DB use (get_engine / ORM)
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

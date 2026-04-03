@@ -1,20 +1,41 @@
 .env
+
 .env.*
+
 !.env.example
+
 __pycache__/
+
 *.py[cod]
+
 .venv/
+
 venv/
-node_modules/
-dist/
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 data/raw/
 # MVP CSVs (load locally with scripts/import_csv_to_mongo.py --az-mvp)
 data/az-data/
+
+node_modules/
+
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+.ruff_cache/
+
 coverage/
+
 .DS_Store
+
 logs/
+
+
+
+# Local / sensitive datasets — keep on disk; use scripts/import_csv_to_postgres.py after clone
+
 data/
+
+# Internal schema notes — not published with the repo
+
+docs/
+

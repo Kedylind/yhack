@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.auth_deps import AuthUser, get_current_user_required
-from app.api.deps import DbDep
+from app.api.deps import DbDepAuth
 from app.db.repositories.user_repository import UserRepository
 from app.models.api import UserMePatch, UserMeResponse
 
@@ -9,7 +9,10 @@ router = APIRouter()
 
 
 @router.get("/me", response_model=UserMeResponse)
-def get_me(db: DbDep, user: AuthUser = Depends(get_current_user_required)) -> UserMeResponse:
+def get_me(
+    db: DbDepAuth,
+    user: AuthUser = Depends(get_current_user_required),
+) -> UserMeResponse:
     repo = UserRepository(db)
     u = repo.find_by_id(user.sub)
     if u is None:
@@ -25,7 +28,7 @@ def get_me(db: DbDep, user: AuthUser = Depends(get_current_user_required)) -> Us
 @router.patch("/me", response_model=UserMeResponse)
 def patch_me(
     body: UserMePatch,
-    db: DbDep,
+    db: DbDepAuth,
     user: AuthUser = Depends(get_current_user_required),
 ) -> UserMeResponse:
     if body.user_profile is None and body.insurance_profile is None:

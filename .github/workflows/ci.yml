@@ -27,7 +27,7 @@ jobs:
       - name: Pytest
         run: pytest
       - name: Docker build API image
-        run: docker build -t yhack-api:ci ./backend
+        run: docker build -t yhack-api:ci .
 
   frontend:
     runs-on: ubuntu-latest

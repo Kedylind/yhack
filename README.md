@@ -109,14 +109,15 @@ Set `VITE_*` variables **before** `npm run build` on Railway so Vite embeds them
 
 ## Local development
 
+The `data/` tree (sample and AZ CSVs) and `docs/` are **gitignored** and are not pushed to GitHub. Keep those folders on your machine (or copy them from teammates / internal storage) before running `scripts/import_csv_to_postgres.py`. **Pytest** uses tracked copies under `backend/tests/fixtures/` so CI does not need repo-root `data/`.
+
 ### 1. Create schema and seed PostgreSQL from sample CSVs
 
-Ensure PostgreSQL is running and `DATABASE_URL` in `backend/.env` points at it. Apply migrations, then import.
+Ensure PostgreSQL is running and `DATABASE_URL` in `backend/.env` points at it. The first API request or import run that opens the DB creates tables from the ORM models (`create_all`); then import data.
 
 ```powershell
 cd backend
 pip install -r requirements-dev.txt
-alembic upgrade head
 cd ..
 python scripts/import_csv_to_postgres.py
 ```
@@ -149,7 +150,7 @@ The Vite dev server proxies `/api` to `http://127.0.0.1:8000` (see `frontend/vit
 
 ### 4. Tests (TDD gate)
 
-Integration tests expect PostgreSQL. Set `TEST_DATABASE_URL` (and `DATABASE_URL`) to a dedicated test database, run `alembic upgrade head` once, then:
+Integration tests expect PostgreSQL. Set `TEST_DATABASE_URL` (and `DATABASE_URL`) to a dedicated test database; tests create schema with `create_all`.
 
 ```powershell
 cd backend
@@ -190,7 +191,7 @@ Starts PostgreSQL and the API. Import data with `python scripts/import_csv_to_po
 ## Railway
 
 1. Add the **PostgreSQL** plugin and copy `DATABASE_URL` into the backend service.
-2. Set **`JWT_SECRET_KEY`** (long random string) and **`CORS_ORIGINS`** to your frontend origin. The Docker image runs **`alembic upgrade head`** on startup before Uvicorn.
+2. Set **`JWT_SECRET_KEY`** (long random string) and **`CORS_ORIGINS`** to your frontend origin. Tables are created automatically on first database use (no migration CLI).
 3. Deploy the **backend** from `backend/`. Add **`LAVA_API_KEY`**, **`LAVA_API_BASE_URL`**, and **`LAVA_GEMINI_MODEL`** if you want GI AI features in production.
 4. Build the **frontend** with `VITE_API_BASE_URL` pointing at your API; host `frontend/dist` as a static site.
 
