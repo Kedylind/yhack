@@ -120,3 +120,6 @@ npi,name,address,city,zip,lat,lng,taxonomy,phone,specialties,source,hospital
 1699337055,Anne Hu,55 Fruit St,Boston,02114,42.3632,-71.0686,207RG0100X,617-643-0826,Gastroenterology,NPPES,Massachusetts General Hospital
 1205894409,Christopher Huang,"725 Albany St, Fl 6",Boston,02118,42.3346,-71.0721,207RG0100X,617-638-6525,Gastroenterology,NPPES,Boston Medical Center
 1932603735,Kevin Huang,"725 Albany Street, Fl 6",Boston,02118,42.3346,-71.0721,207RG0100X,617-638-6525,Gastroenterology,NPPES,Boston Medical Center
+1234567890,Sample Seed One,1 Demo St,Boston,02118,42.3358,-71.0726,207RG0100X,555-000-0001,Gastroenterology,sample_seed,Demo Hospital
+1234567891,Sample Seed Two,2 Demo St,Boston,02118,42.3358,-71.0726,207RG0100X,555-000-0002,Gastroenterology,sample_seed,Demo Hospital
+1234567892,Sample Seed Three,3 Demo St,Boston,02118,42.3358,-71.0726,207RG0100X,555-000-0003,Gastroenterology,sample_seed,Demo Hospital

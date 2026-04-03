@@ -38,7 +38,7 @@ export function apiEstimateToCostEstimate(e: ProviderEstimateApi): CostEstimate 
 /**
  * Single dollar amount on map pins: your-plan **max OOP** when &gt; 0; otherwise
  * **negotiated allowed** (~$) so pins still show a number when OOP math rounds to $0
- * but payer rates exist. Re-seed Mongo if everything is still "—" (missing `prices` rows for bundle).
+ * but payer rates exist. Re-seed the database if everything is still "—" (missing `prices` rows for bundle).
  */
 export function formatPinPrice(e: CostEstimate): string {
   const oop = e.oopMax ?? e.patientResponsibility;

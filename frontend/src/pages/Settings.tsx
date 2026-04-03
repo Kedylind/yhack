@@ -16,12 +16,11 @@ import {
   userProfileToApi,
   type InsurerOptionApi,
 } from '@/api/client';
-import { isAuth0Configured } from '@/config/auth';
 import { isBcbsInsurerKey } from '@/lib/insurance';
 import { isoToUsDisplay, maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
 
 const Settings = () => {
-  const { profile, insurance, setProfile, setInsurance } = useAuth();
+  const { profile, insurance, setProfile, setInsurance, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(profile?.fullName || '');
   const [zip, setZip] = useState(profile?.zip || '');
@@ -99,7 +98,7 @@ const Settings = () => {
     };
     setProfile(nextProfile);
     setInsurance(nextInsurance);
-    if (isAuth0Configured()) {
+    if (isAuthenticated) {
       try {
         await patchUserMe({
           user_profile: userProfileToApi(nextProfile),

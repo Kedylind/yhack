@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
-from app.routes import confirm, estimate, gi_assistant, health, hospitals, intake, providers, users
+from app.routes import auth, confirm, estimate, gi_assistant, health, hospitals, intake, providers, users
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
+api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(intake.router, prefix="/intake", tags=["intake"])
 api_router.include_router(confirm.router, prefix="/confirm", tags=["confirm"])
 api_router.include_router(estimate.router, prefix="/estimate", tags=["estimate"])

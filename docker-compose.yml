@@ -1,10 +1,14 @@
 services:
-  mongo:
-    image: mongo:7
+  postgres:
+    image: postgres:16
     ports:
-      - "27017:27017"
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: carecost
     volumes:
-      - mongo_data:/data/db
+      - postgres_data:/var/lib/postgresql/data
 
   api:
     build:
@@ -13,11 +17,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      MONGODB_URI: mongodb://mongo:27017
-      MONGODB_DB_NAME: boston_gi_demo
-      CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/carecost
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-change-in-production}
+      CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173
     depends_on:
-      - mongo
+      - postgres
 
 volumes:
-  mongo_data:
+  postgres_data:

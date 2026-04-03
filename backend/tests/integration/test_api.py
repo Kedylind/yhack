@@ -1,4 +1,4 @@
-"""HTTP contract tests against in-memory Mongo."""
+"""HTTP contract tests against a seeded PostgreSQL test database (see conftest)."""
 
 from fastapi.testclient import TestClient
 
@@ -20,7 +20,7 @@ def test_providers_list(client: TestClient) -> None:
     r = client.get("/api/providers")
     assert r.status_code == 200
     data = r.json()
-    assert len(data) == 121
+    assert len(data) == 124
     assert data[0]["specialties"] == ["Gastroenterology"]
     assert "hospital" in data[0]
 
@@ -41,7 +41,7 @@ def test_estimate_returns_bundles_and_prices(client: TestClient) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["bundle_id"] == "colonoscopy_screening"
-    assert len(body["estimates"]) == 121
+    assert len(body["estimates"]) == 124
     est = body["estimates"][0]
     assert est["allowed_amount_range"]["min"] <= est["allowed_amount_range"]["max"]
 

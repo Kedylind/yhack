@@ -1,8 +1,7 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { UserProfile, InsuranceProfile } from '@/types';
+import { getStoredToken, loginApi, registerApi, setStoredToken } from '@/api/auth';
 import { clearAllGiContinuityForLogout } from '@/lib/giContinuity';
-import { isAuth0Configured } from '@/config/auth';
 import {
   fetchUserMe,
   insuranceProfileFromApi,
@@ -22,7 +21,6 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  /** Auth0: redirect to Universal Login. Legacy: stub sign-in (email/password ignored for password). */
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -50,91 +48,32 @@ const initialState: AuthState = {
   intakePayload: null,
 };
 
-function LegacyAuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>({ ...initialState, meLoaded: true });
-
-  const login = useCallback(async (email: string, _password: string) => {
-    setState(s => ({ ...s, isAuthenticated: true, user: { email } }));
-  }, []);
-
-  const signup = useCallback(async (email: string, _password: string) => {
-    setState(s => ({ ...s, isAuthenticated: true, user: { email } }));
-  }, []);
-
-  const logout = useCallback(() => {
-    setState(s => {
-      clearAllGiContinuityForLogout(s.user?.email);
-      return { ...initialState };
-    });
-  }, []);
-
-  const setIntakePayload = useCallback((intakePayload: Record<string, unknown> | null) => {
-    setState(s => ({ ...s, intakePayload }));
-  }, []);
-
-  const setProfile = useCallback((profile: UserProfile) => {
-    setState(s => ({ ...s, profile }));
-  }, []);
-
-  const setInsurance = useCallback((insurance: InsuranceProfile) => {
-    setState(s => ({ ...s, insurance }));
-  }, []);
-
-  const completeOnboarding = useCallback(() => {
-    setState(s => ({ ...s, onboardingComplete: true }));
-  }, []);
-
-  return (
-    <AuthContext.Provider
-      value={{
-        ...state,
-        login,
-        signup,
-        logout,
-        setProfile,
-        setInsurance,
-        setIntakePayload,
-        completeOnboarding,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user, loginWithRedirect, logout: auth0Logout, getAccessTokenSilently } =
-    useAuth0();
-  const audience = import.meta.env.VITE_AUTH0_AUDIENCE ?? '';
-
-  const [state, setState] = useState<AuthState>({
-    ...initialState,
-    isAuthenticated: false,
-  });
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [token, setToken] = useState<string | null>(() => getStoredToken());
+  const tokenRef = useRef<string | null>(token);
+  const [state, setState] = useState<AuthState>({ ...initialState });
 
   useEffect(() => {
-    setState(s => ({ ...s, isAuthenticated, meLoaded: false }));
-  }, [isAuthenticated]);
+    tokenRef.current = token;
+  }, [token]);
 
   useEffect(() => {
-    const email = user?.email ?? '';
-    setState(s => ({ ...s, user: isAuthenticated && email ? { email } : null }));
-  }, [isAuthenticated, user?.email]);
-
-  useEffect(() => {
-    setApiAccessTokenGetter(async () => {
-      try {
-        return await getAccessTokenSilently({ authorizationParams: { audience } });
-      } catch {
-        return null;
-      }
-    });
+    setApiAccessTokenGetter(async () => tokenRef.current);
     return () => setApiAccessTokenGetter(null);
-  }, [getAccessTokenSilently, audience]);
+  }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!token) {
+      setState(s => ({
+        ...initialState,
+        meLoaded: true,
+        onboardingComplete: s.onboardingComplete,
+        intakePayload: s.intakePayload,
+      }));
+      return;
+    }
     let cancelled = false;
+    setState(s => ({ ...s, isAuthenticated: true, meLoaded: false }));
     (async () => {
       try {
         const me = await fetchUserMe();
@@ -143,41 +82,46 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
         const ins = insuranceProfileFromApi(me.insurance_profile ?? undefined);
         setState(s => ({
           ...s,
+          user: me.email ? { email: me.email } : s.user,
           profile: up ?? s.profile,
           insurance: ins ?? s.insurance,
+          meLoaded: true,
         }));
       } catch {
-        /* offline or API not configured */
-      } finally {
-        if (!cancelled) setState(s => ({ ...s, meLoaded: true }));
+        if (!cancelled) {
+          setStoredToken(null);
+          setToken(null);
+          setState(s => ({ ...initialState, meLoaded: true, intakePayload: s.intakePayload }));
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [token]);
 
-  const login = useCallback(
-    async (_email: string, _password: string) => {
-      await loginWithRedirect();
-    },
-    [loginWithRedirect],
-  );
+  const login = useCallback(async (email: string, password: string) => {
+    const res = await loginApi(email, password);
+    setStoredToken(res.access_token);
+    setToken(res.access_token);
+    setState(s => ({ ...s, user: { email } }));
+  }, []);
 
-  const signup = useCallback(
-    async (_email: string, _password: string) => {
-      await loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } });
-    },
-    [loginWithRedirect],
-  );
+  const signup = useCallback(async (email: string, password: string) => {
+    const res = await registerApi(email, password);
+    setStoredToken(res.access_token);
+    setToken(res.access_token);
+    setState(s => ({ ...s, user: { email } }));
+  }, []);
 
   const logout = useCallback(() => {
+    setStoredToken(null);
+    setToken(null);
     setState(s => {
       clearAllGiContinuityForLogout(s.user?.email);
-      return { ...initialState };
+      return { ...initialState, meLoaded: true };
     });
-    auth0Logout({ logoutParams: { returnTo: window.location.origin } });
-  }, [auth0Logout]);
+  }, []);
 
   const setIntakePayload = useCallback((intakePayload: Record<string, unknown> | null) => {
     setState(s => ({ ...s, intakePayload }));
@@ -210,29 +154,5 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
     >
       {children}
     </AuthContext.Provider>
-  );
-}
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  if (!isAuth0Configured()) {
-    return <LegacyAuthProvider>{children}</LegacyAuthProvider>;
-  }
-  const domain = import.meta.env.VITE_AUTH0_DOMAIN!;
-  const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID!;
-  const aud = import.meta.env.VITE_AUTH0_AUDIENCE!;
-
-  return (
-    <Auth0Provider
-      domain={domain}
-      clientId={clientId}
-      authorizationParams={{
-        redirect_uri: `${window.location.origin}/callback`,
-        audience: aud,
-      }}
-      cacheLocation="localstorage"
-      useRefreshTokens
-    >
-      <Auth0SessionProvider>{children}</Auth0SessionProvider>
-    </Auth0Provider>
   );
 };

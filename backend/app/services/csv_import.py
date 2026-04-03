@@ -1,4 +1,4 @@
-"""CSV → MongoDB idempotent import for demo data."""
+"""CSV → PostgreSQL idempotent import for demo data."""
 
 from __future__ import annotations
 
@@ -7,7 +7,11 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from pymongo.database import Database
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
+
+from app.db.tables import HospitalRate, Insurer, Price, Procedure, Provider
 
 # Scenario bundle → CPT used to pick a row in hospital_rates (MVP; aligns with az CPT list).
 BUNDLE_CPT_AZ_MVP: dict[str, str] = {
@@ -112,12 +116,36 @@ def _require_columns(row_keys: set[str], required: tuple[str, ...], file_label: 
         raise ValueError(f"{file_label}: missing columns: {', '.join(missing)}")
 
 
-def import_providers_csv(db: Database, path: Path) -> int:
+def _upsert_provider(session: Session, doc: dict[str, Any]) -> None:
+    stmt = (
+        pg_insert(Provider)
+        .values(**doc)
+        .on_conflict_do_update(
+            index_elements=[Provider.npi.key],
+            set_={
+                "name": doc["name"],
+                "address": doc["address"],
+                "city": doc["city"],
+                "zip": doc["zip"],
+                "state": doc.get("state"),
+                "lat": doc["lat"],
+                "lng": doc["lng"],
+                "taxonomy": doc["taxonomy"],
+                "phone": doc["phone"],
+                "specialties": doc["specialties"],
+                "source": doc["source"],
+                "hospital": doc["hospital"],
+            },
+        )
+    )
+    session.execute(stmt)
+
+
+def import_providers_csv(session: Session, path: Path) -> int:
     rows = _read_csv(path)
     if not rows:
         return 0
     _require_columns(set(rows[0].keys()), PROVIDERS_COLUMNS, path.name)
-    col = db["providers"]
     count = 0
     for row in rows:
         npi = row["npi"].strip()
@@ -125,88 +153,109 @@ def import_providers_csv(db: Database, path: Path) -> int:
         lng = float(row["lng"])
         specialties = [s.strip() for s in row["specialties"].split(",") if s.strip()]
         doc: dict[str, Any] = {
-            "_id": npi,
             "npi": npi,
             "name": row["name"].strip(),
             "address": row["address"].strip(),
             "city": row["city"].strip(),
             "zip": row["zip"].strip(),
-            "location": {"type": "Point", "coordinates": [lng, lat]},
+            "state": None,
+            "lat": lat,
+            "lng": lng,
             "taxonomy": row["taxonomy"].strip(),
             "phone": row["phone"].strip(),
             "specialties": specialties,
             "source": row["source"].strip(),
             "hospital": row.get("hospital", "").strip(),
         }
-        col.replace_one({"_id": npi}, doc, upsert=True)
+        _upsert_provider(session, doc)
         count += 1
     return count
 
 
-def import_procedures_csv(db: Database, path: Path) -> int:
+def import_procedures_csv(session: Session, path: Path) -> int:
     rows = _read_csv(path)
     if not rows:
         return 0
     _require_columns(set(rows[0].keys()), PROCEDURES_COLUMNS, path.name)
-    col = db["procedures"]
     count = 0
     for row in rows:
         bid = row["bundle_id"].strip()
         cpt_codes = [c.strip() for c in row["cpt_codes"].split("|") if c.strip()]
         doc: dict[str, Any] = {
-            "_id": bid,
             "bundle_id": bid,
             "label": row["label"].strip(),
             "cpt_codes": cpt_codes,
             "tags": row["tags"].strip(),
             "source": row["source"].strip(),
         }
-        col.replace_one({"_id": bid}, doc, upsert=True)
+        stmt = (
+            pg_insert(Procedure)
+            .values(**doc)
+            .on_conflict_do_update(
+                index_elements=[Procedure.bundle_id.key],
+                set_={
+                    "label": doc["label"],
+                    "cpt_codes": doc["cpt_codes"],
+                    "tags": doc["tags"],
+                    "source": doc["source"],
+                },
+            )
+        )
+        session.execute(stmt)
         count += 1
     return count
 
 
-def import_prices_csv(db: Database, path: Path) -> int:
+def import_prices_csv(session: Session, path: Path) -> int:
     rows = _read_csv(path)
     if not rows:
         return 0
     _require_columns(set(rows[0].keys()), PRICES_COLUMNS, path.name)
-    col = db["prices"]
     count = 0
     for row in rows:
         provider_id = row["provider_id"].strip()
         bundle_id = row["bundle_id"].strip()
         source = row["source"].strip()
         effective = row["effective_date"].strip()
-        filter_key = {
+        doc: dict[str, Any] = {
             "provider_id": provider_id,
             "bundle_id": bundle_id,
             "source": source,
             "effective_date": effective,
-        }
-        doc: dict[str, Any] = {
-            **filter_key,
             "min_rate_cents": int(row["min_rate_cents"]),
             "max_rate_cents": int(row["max_rate_cents"]),
             "payer": row["payer"].strip(),
             "confidence": float(row["confidence"]),
+            "mvp_hospital_id": None,
         }
-        col.replace_one(filter_key, doc, upsert=True)
+        stmt = (
+            pg_insert(Price)
+            .values(**doc)
+            .on_conflict_do_update(
+                constraint="uq_prices_natural_key",
+                set_={
+                    "min_rate_cents": doc["min_rate_cents"],
+                    "max_rate_cents": doc["max_rate_cents"],
+                    "payer": doc["payer"],
+                    "confidence": doc["confidence"],
+                    "mvp_hospital_id": doc["mvp_hospital_id"],
+                },
+            )
+        )
+        session.execute(stmt)
         count += 1
     return count
 
 
-def import_insurers_csv(db: Database, path: Path) -> int:
+def import_insurers_csv(session: Session, path: Path) -> int:
     rows = _read_csv(path)
     if not rows:
         return 0
     _require_columns(set(rows[0].keys()), INSURERS_COLUMNS, path.name)
-    col = db["insurers"]
     count = 0
     for row in rows:
         pid = row["plan_id"].strip()
         doc: dict[str, Any] = {
-            "_id": pid,
             "plan_id": pid,
             "carrier": row["carrier"].strip(),
             "deductible_cents": int(row["deductible_cents"]),
@@ -215,18 +264,32 @@ def import_insurers_csv(db: Database, path: Path) -> int:
             "copay_cents": int(row["copay_cents"]),
             "source": row["source"].strip(),
         }
-        col.replace_one({"_id": pid}, doc, upsert=True)
+        stmt = (
+            pg_insert(Insurer)
+            .values(**doc)
+            .on_conflict_do_update(
+                index_elements=[Insurer.plan_id.key],
+                set_={
+                    "carrier": doc["carrier"],
+                    "deductible_cents": doc["deductible_cents"],
+                    "oop_max_cents": doc["oop_max_cents"],
+                    "coinsurance_pct": doc["coinsurance_pct"],
+                    "copay_cents": doc["copay_cents"],
+                    "source": doc["source"],
+                },
+            )
+        )
+        session.execute(stmt)
         count += 1
     return count
 
 
-def import_az_providers_csv(db: Database, path: Path) -> int:
+def import_az_providers_csv(session: Session, path: Path) -> int:
     """Load data/az-data/providers.csv into `providers` (NPI physicians, GI demo)."""
     rows = _read_csv(path)
     if not rows:
         return 0
     _require_columns(set(rows[0].keys()), AZ_PROVIDERS_COLUMNS, path.name)
-    col = db["providers"]
     count = 0
     for row in rows:
         npi = row["npi"].strip()
@@ -239,38 +302,37 @@ def import_az_providers_csv(db: Database, path: Path) -> int:
         name = " ".join(name_parts)
         lat, lng = _npi_jitter_lat_lng(npi)
         doc: dict[str, Any] = {
-            "_id": npi,
             "npi": npi,
             "name": name,
             "address": row["address"].strip(),
             "city": row["city"].strip(),
             "zip": row["zip"].strip(),
-            "state": row.get("state", "").strip(),
-            "location": {"type": "Point", "coordinates": [lng, lat]},
+            "state": row.get("state", "").strip() or None,
+            "lat": lat,
+            "lng": lng,
             "taxonomy": "207RG0100X",
             "phone": row["phone"].strip(),
             "specialties": ["Gastroenterology"],
             "source": "az_mvp",
             "hospital": row.get("hospital", "").strip(),
         }
-        col.replace_one({"_id": npi}, doc, upsert=True)
+        _upsert_provider(session, doc)
         count += 1
     return count
 
 
-def import_hospital_rates_csv(db: Database, path: Path) -> int:
-    """Load hospital_rates_clean.csv into `hospital_rates` (one doc per hospital × CPT row)."""
+def import_hospital_rates_csv(session: Session, path: Path) -> int:
+    """Load hospital_rates_clean.csv into `hospital_rates` (one row per hospital × CPT)."""
     rows = _read_csv(path)
     if not rows:
         return 0
-    col = db["hospital_rates"]
     count = 0
     for row in rows:
         hid = row["hospital_id"].strip()
         cpt = str(row["cpt"]).strip()
         doc_id = f"{hid}:{cpt}"
         doc: dict[str, Any] = {
-            "_id": doc_id,
+            "id": doc_id,
             "hospital_id": hid,
             "hospital_name": row.get("hospital_name", "").strip(),
             "neighborhood": row.get("neighborhood", "").strip(),
@@ -292,7 +354,15 @@ def import_hospital_rates_csv(db: Database, path: Path) -> int:
             "bcbs_tic_rate": _parse_float_cell(row.get("bcbs_tic_rate", "")),
             "source": "az_mvp",
         }
-        col.replace_one({"_id": doc_id}, doc, upsert=True)
+        stmt = (
+            pg_insert(HospitalRate)
+            .values(**doc)
+            .on_conflict_do_update(
+                index_elements=[HospitalRate.id.key],
+                set_={k: v for k, v in doc.items() if k != "id"},
+            )
+        )
+        session.execute(stmt)
         count += 1
     return count
 
@@ -307,7 +377,7 @@ _AZ_PAYER_RATE_FIELDS: tuple[tuple[str, str], ...] = (
 
 
 def import_az_mvp_prices(
-    db: Database,
+    session: Session,
     hospital_id: str = "bmc",
     effective_date: str = "2024-01-01",
 ) -> int:
@@ -316,25 +386,29 @@ def import_az_mvp_prices(
     using negotiated rates from hospital_rates (bcbs/aetna/HP/UHC columns) when present,
     else de-identified min/max for BCBS_MA only.
     """
-    col = db["prices"]
-    npis = [d["npi"] for d in db["providers"].find({"source": "az_mvp"}, {"npi": 1})]
+    npis = list(
+        session.scalars(select(Provider.npi).where(Provider.source == "az_mvp")).all()
+    )
     if not npis:
         return 0
 
     count = 0
     for bundle_id, cpt in BUNDLE_CPT_AZ_MVP.items():
-        hr = db["hospital_rates"].find_one(
-            {"hospital_id": hospital_id, "cpt": cpt},
+        hr = session.scalar(
+            select(HospitalRate).where(
+                HospitalRate.hospital_id == hospital_id,
+                HospitalRate.cpt == cpt,
+            )
         )
         if not hr:
             continue
 
-        dmin = hr.get("de_identified_min")
-        dmax = hr.get("de_identified_max")
+        dmin = hr.de_identified_min
+        dmax = hr.de_identified_max
         fallback_min_c = _dollars_to_cents(dmin) if dmin is not None else None
         fallback_max_c = _dollars_to_cents(dmax) if dmax is not None else None
         if fallback_min_c is None and fallback_max_c is None:
-            g = hr.get("gross_charge")
+            g = hr.gross_charge
             gc = _dollars_to_cents(g) if g is not None else None
             fallback_min_c = fallback_max_c = gc or 0
         elif fallback_min_c is None:
@@ -344,7 +418,7 @@ def import_az_mvp_prices(
 
         payer_bands: list[tuple[str, int, int]] = []
         for field_name, payer_key in _AZ_PAYER_RATE_FIELDS:
-            raw = hr.get(field_name)
+            raw = getattr(hr, field_name, None)
             c = _dollars_to_cents(raw) if raw is not None else None
             if c is None or c <= 0:
                 continue
@@ -357,28 +431,38 @@ def import_az_mvp_prices(
 
         for npi in npis:
             for payer_key, min_c, max_c in payer_bands:
-                filter_key = {
+                doc: dict[str, Any] = {
                     "provider_id": npi,
                     "bundle_id": bundle_id,
                     "payer": payer_key,
                     "source": "az_mvp",
                     "effective_date": effective_date,
-                }
-                doc: dict[str, Any] = {
-                    **filter_key,
                     "min_rate_cents": min_c,
                     "max_rate_cents": max_c,
                     "confidence": 0.88,
                     "mvp_hospital_id": hospital_id,
                 }
-                col.replace_one(filter_key, doc, upsert=True)
+                stmt = (
+                    pg_insert(Price)
+                    .values(**doc)
+                    .on_conflict_do_update(
+                        constraint="uq_prices_natural_key",
+                        set_={
+                            "min_rate_cents": doc["min_rate_cents"],
+                            "max_rate_cents": doc["max_rate_cents"],
+                            "confidence": doc["confidence"],
+                            "mvp_hospital_id": doc["mvp_hospital_id"],
+                        },
+                    )
+                )
+                session.execute(stmt)
                 count += 1
 
     return count
 
 
 def import_az_directory(
-    db: Database,
+    session: Session,
     directory: Path,
     *,
     price_hospital_id: str = "bmc",
@@ -387,36 +471,33 @@ def import_az_directory(
     counts: dict[str, int] = {}
     p = directory / "providers.csv"
     if p.exists():
-        counts["providers"] = import_az_providers_csv(db, p)
+        counts["providers"] = import_az_providers_csv(session, p)
     p = directory / "hospital_rates_clean.csv"
     if p.exists():
-        counts["hospital_rates"] = import_hospital_rates_csv(db, p)
+        counts["hospital_rates"] = import_hospital_rates_csv(session, p)
     if counts.get("providers") and counts.get("hospital_rates"):
-        counts["prices"] = import_az_mvp_prices(db, hospital_id=price_hospital_id)
+        counts["prices"] = import_az_mvp_prices(session, hospital_id=price_hospital_id)
     return counts
 
 
-def import_sample_directory(db: Database, directory: Path) -> dict[str, int]:
+def import_sample_directory(session: Session, directory: Path) -> dict[str, int]:
     """Import all sample CSVs from a directory; return counts per collection."""
     counts: dict[str, int] = {}
     p = directory / "providers.csv"
     if p.exists():
-        counts["providers"] = import_providers_csv(db, p)
+        counts["providers"] = import_providers_csv(session, p)
     p = directory / "procedures.csv"
     if p.exists():
-        counts["procedures"] = import_procedures_csv(db, p)
+        counts["procedures"] = import_procedures_csv(session, p)
     p = directory / "prices.csv"
     if p.exists():
-        counts["prices"] = import_prices_csv(db, p)
+        counts["prices"] = import_prices_csv(session, p)
     p = directory / "insurers.csv"
     if p.exists():
-        counts["insurers"] = import_insurers_csv(db, p)
+        counts["insurers"] = import_insurers_csv(session, p)
     return counts
 
 
-def ensure_indexes(db: Database) -> None:
-    db["providers"].create_index([("location", "2dsphere")])
-    db["providers"].create_index([("zip", 1), ("specialties", 1)])
-    db["prices"].create_index([("provider_id", 1), ("bundle_id", 1), ("payer", 1)])
-    db["procedures"].create_index([("bundle_id", 1)])
-    db["hospital_rates"].create_index([("hospital_id", 1), ("cpt", 1)])
+def ensure_indexes(_session: Session) -> None:
+    """Indexes are created by Alembic migrations; kept for API compatibility."""
+    return None

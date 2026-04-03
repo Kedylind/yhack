@@ -6,7 +6,7 @@
 
 </div>
 
-CareCost is a **provenance-first healthcare shopping** experience: compare **out-of-pocket bands**, explore **providers on a map**, and use **AI agents** that ask interactive questions so you land on the right **CPT / procedure bundle**—then see it reflected on the map. The demo dataset focuses on **gastroenterology** (with plans to expand specialties). Stack: **FastAPI** + **MongoDB** + **Vite/React** (Leaflet).
+CareCost is a **provenance-first healthcare shopping** experience: compare **out-of-pocket bands**, explore **providers on a map**, and use **AI agents** that ask interactive questions so you land on the right **CPT / procedure bundle**—then see it reflected on the map. The demo dataset focuses on **gastroenterology** (with plans to expand specialties). Stack: **FastAPI** + **PostgreSQL** + **Vite/React** (Leaflet).
 
 ---
 
@@ -49,10 +49,10 @@ We hope we did. It doesn’t have to be sci-fi “mind-blowing”; sadly, **cari
 | Partner | How we used it |
 |--------|----------------|
 | **GoDaddy Registry** | Our **domain name** |
-| **MongoDB** | **Database** for providers, scenarios, and app data |
+| **PostgreSQL** | **Database** for providers, scenarios, users, and app data |
 | **Gemini** | **Model behind our agents**, called via **Lava** (see above) |
 | **ElevenLabs** | **Voiceover** for our **presentation video** |
-| **Auth0** | **Authentication** to secure the platform |
+| **First-party auth** | **Email/password** + **JWT** stored in PostgreSQL |
 
 ---
 
@@ -60,7 +60,7 @@ We hope we did. It doesn’t have to be sci-fi “mind-blowing”; sadly, **cari
 
 - Python 3.11+
 - Node 18+
-- MongoDB 6+ (local or Docker), or use Railway/Atlas in deployment
+- PostgreSQL 14+ (local or Docker), or Railway Postgres in deployment
 
 ## Environment variables
 
@@ -68,14 +68,11 @@ We hope we did. It doesn’t have to be sci-fi “mind-blowing”; sadly, **cari
 
 | Variable | Description |
 |----------|-------------|
-| `MONGODB_URI` | Mongo connection string (default `mongodb://localhost:27017`) |
-| `MONGODB_DB_NAME` | Database name (default `boston_gi_demo`) |
+| `DATABASE_URL` | PostgreSQL URL (SQLAlchemy format, e.g. `postgresql+psycopg2://user:pass@host:5432/dbname`) |
+| `JWT_SECRET_KEY` | Secret for signing HS256 access tokens (use a long random value in production) |
 | `LLM_API_KEY` | Optional; if unset, `/api/confirm` uses a deterministic fake LLM in tests |
 | `LLM_MODEL` | OpenAI-compatible model name when using a live key |
 | `CORS_ORIGINS` | Comma-separated origins for the browser app (no trailing slash on each origin; include your Railway frontend URL in production) |
-| `AUTH0_DOMAIN` | Auth0 tenant domain (e.g. `dev-xxx.us.auth0.com`) |
-| `AUTH0_AUDIENCE` | API identifier from Auth0 **APIs** (must match the SPA `audience` / access token `aud` claim) |
-| `AUTH0_ISSUER` | Issuer URL, must match JWT `iss` (typically `https://YOUR_AUTH0_DOMAIN/`) |
 
 ### GI assistant — Lava API key (Gemini)
 
@@ -107,31 +104,27 @@ For **production**, set the same variables as secrets on your host (Railway, Fly
 | Variable | Description |
 |----------|-------------|
 | `VITE_API_BASE_URL` | Public API origin (e.g. `https://your-api.up.railway.app`). For local dev, leave empty and use the Vite proxy to `http://127.0.0.1:8000`. |
-| `VITE_AUTH0_DOMAIN` | Auth0 tenant domain (SPA application) |
-| `VITE_AUTH0_CLIENT_ID` | Auth0 SPA client ID |
-| `VITE_AUTH0_AUDIENCE` | Same identifier as `AUTH0_AUDIENCE` on the API (access token audience) |
 
 Set `VITE_*` variables **before** `npm run build` on Railway so Vite embeds them. Redeploy the frontend after changing them.
 
 ## Local development
 
-### 1. Seed MongoDB from sample CSVs
+### 1. Create schema and seed PostgreSQL from sample CSVs
 
-From the repo root (with Mongo running). The importer loads **`backend/.env`** automatically so `MONGODB_URI` matches the API.
+Ensure PostgreSQL is running and `DATABASE_URL` in `backend/.env` points at it. Apply migrations, then import.
 
 ```powershell
 cd backend
 pip install -r requirements-dev.txt
+alembic upgrade head
 cd ..
-python scripts/import_csv_to_mongo.py
+python scripts/import_csv_to_postgres.py
 ```
 
-To override for one run: `$env:MONGODB_URI = "mongodb://localhost:27017"` (or your Atlas URI).
-
-Dry-run (in-memory parse, requires `mongomock` from dev requirements):
+Arizona MVP bundle (adds `data/az-data` providers + hospital rates + synthetic prices):
 
 ```powershell
-python scripts/import_csv_to_mongo.py --dry-run
+python scripts/import_csv_to_postgres.py --az-mvp
 ```
 
 ### 2. Run the API
@@ -142,7 +135,7 @@ pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Health: `GET http://127.0.0.1:8000/api/health` (includes `lava_configured` for the GI assistant).
+Health: `GET http://127.0.0.1:8000/api/health` (includes `database_connected` and `lava_configured`).
 
 ### 3. Run the frontend
 
@@ -155,6 +148,8 @@ npm run dev
 The Vite dev server proxies `/api` to `http://127.0.0.1:8000` (see `frontend/vite.config.ts`).
 
 ### 4. Tests (TDD gate)
+
+Integration tests expect PostgreSQL. Set `TEST_DATABASE_URL` (and `DATABASE_URL`) to a dedicated test database, run `alembic upgrade head` once, then:
 
 ```powershell
 cd backend
@@ -170,7 +165,11 @@ npm test
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/health` | Health check (`lava_configured` reflects `LAVA_API_KEY`) |
+| GET | `/api/health` | Health check (`database_connected`, `lava_configured`) |
+| POST | `/api/auth/register` | Email + password → JWT |
+| POST | `/api/auth/login` | Email + password → JWT |
+| GET | `/api/users/me` | Current user profiles (Bearer JWT) |
+| PATCH | `/api/users/me` | Update `user_profile` / `insurance_profile` |
 | POST | `/api/gi-assistant/symptom-refine` | Symptom → Gemini → GI CPT leaf suggestion |
 | POST | `/api/gi-assistant/suggest-next` | Suggest next decision-tree branch (requires `LAVA_API_KEY`) |
 | POST | `/api/intake` | Validate and normalize intake; returns `missing_required` |
@@ -186,13 +185,14 @@ npm test
 docker compose up --build
 ```
 
-Starts MongoDB and the API; import data separately with `import_csv_to_mongo.py` pointed at the compose Mongo URI.
+Starts PostgreSQL and the API. Import data with `python scripts/import_csv_to_postgres.py` using the same `DATABASE_URL` as the API container (`postgresql+psycopg2://postgres:postgres@localhost:5432/carecost` from the host if you expose port 5432).
 
 ## Railway
 
-1. Create a **MongoDB** plugin (or Atlas) and set `MONGODB_URI`.
-2. Deploy the **backend** from `backend/` (Dockerfile) with `CORS_ORIGINS` set to your static site origin. Add **`LAVA_API_KEY`**, **`LAVA_API_BASE_URL`**, and **`LAVA_GEMINI_MODEL`** as secrets if you want the GI AI features in production.
-3. Build the **frontend** with `VITE_API_BASE_URL` = your API URL; host `frontend/dist` as a static site or serve behind the same origin.
+1. Add the **PostgreSQL** plugin and copy `DATABASE_URL` into the backend service.
+2. Set **`JWT_SECRET_KEY`** (long random string) and **`CORS_ORIGINS`** to your frontend origin. The Docker image runs **`alembic upgrade head`** on startup before Uvicorn.
+3. Deploy the **backend** from `backend/`. Add **`LAVA_API_KEY`**, **`LAVA_API_BASE_URL`**, and **`LAVA_GEMINI_MODEL`** if you want GI AI features in production.
+4. Build the **frontend** with `VITE_API_BASE_URL` pointing at your API; host `frontend/dist` as a static site.
 
 ## Disclaimer
 

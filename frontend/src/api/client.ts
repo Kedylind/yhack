@@ -6,7 +6,7 @@ export type AccessTokenGetter = () => Promise<string | null | undefined>;
 
 let accessTokenGetter: AccessTokenGetter | null = null;
 
-/** Called from AuthContext so API requests can attach `Authorization: Bearer` when logged in with Auth0. */
+/** Called from AuthContext so API requests can attach `Authorization: Bearer` when logged in. */
 export function setApiAccessTokenGetter(fn: AccessTokenGetter | null) {
   accessTokenGetter = fn;
 }
@@ -158,7 +158,7 @@ export async function fetchProviders(params?: { specialty?: string; zip?: string
 export async function postEstimate(body: {
   intake: Record<string, unknown>;
   confirmed?: Record<string, unknown>;
-  /** When set, pricing uses this bundle’s CPT row in Mongo (see GI decision tree). */
+  /** When set, pricing uses this bundle’s CPT row in the database (see GI decision tree). */
   bundle_id?: string;
   scenario_id?: string;
 }): Promise<EstimateResponseApi> {
