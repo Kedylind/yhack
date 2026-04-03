@@ -17,7 +17,6 @@ import {
   postIntake,
   userProfileToApi,
 } from '@/api/client';
-import { isAuth0Configured } from '@/config/auth';
 import { isBcbsInsurerKey } from '@/lib/insurance';
 import { maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
 import {
@@ -53,7 +52,13 @@ const Onboarding = () => {
   const [insurers, setInsurers] = useState<InsurerOptionApi[]>([]);
   const [bcbsPlanOptions, setBcbsPlanOptions] = useState<string[]>([]);
   const [coverageOptionsLoading, setCoverageOptionsLoading] = useState(true);
-  const { setProfile: saveProfile, setInsurance: saveInsurance, setIntakePayload, completeOnboarding } = useAuth();
+  const {
+    setProfile: saveProfile,
+    setInsurance: saveInsurance,
+    setIntakePayload,
+    completeOnboarding,
+    isAuthenticated,
+  } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -105,7 +110,7 @@ const Onboarding = () => {
     saveProfile(profile);
     saveInsurance(insurance);
 
-    if (isAuth0Configured()) {
+    if (isAuthenticated) {
       try {
         await patchUserMe({
           user_profile: userProfileToApi(profile),

@@ -5,8 +5,7 @@ from pydantic import BaseModel, EmailStr
 
 
 class UserDB(BaseModel):
-    id: str | None = None
-    auth0_user_id: str
+    id: str
     email: EmailStr | None = None
     full_name: str | None = None
     picture: str | None = None

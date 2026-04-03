@@ -1,16 +1,14 @@
-"""FastAPI dependencies for Auth0 JWT (Bearer access tokens)."""
+"""FastAPI dependencies for HS256 JWT (Bearer access tokens)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.config import get_settings
-from app.services.auth0_jwt import decode_auth0_access_token
+from app.services.jwt_auth import decode_access_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -19,17 +17,6 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class AuthUser:
     sub: str
     email: str | None
-    claims: dict[str, Any]
-
-
-def _require_auth0_config() -> tuple[str, str, str]:
-    s = get_settings()
-    if not (s.AUTH0_DOMAIN and s.AUTH0_AUDIENCE and s.AUTH0_ISSUER):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Auth0 is not configured (set AUTH0_DOMAIN, AUTH0_AUDIENCE, AUTH0_ISSUER)",
-        )
-    return s.AUTH0_DOMAIN, s.AUTH0_AUDIENCE, s.AUTH0_ISSUER
 
 
 def get_current_user_optional(
@@ -37,14 +24,8 @@ def get_current_user_optional(
 ) -> AuthUser | None:
     if creds is None or not creds.credentials:
         return None
-    domain, audience, issuer = _require_auth0_config()
     try:
-        claims = decode_auth0_access_token(
-            creds.credentials,
-            audience=audience,
-            issuer=issuer,
-            domain=domain,
-        )
+        claims = decode_access_token(creds.credentials)
     except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,7 +37,7 @@ def get_current_user_optional(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token missing sub",
         )
-    return AuthUser(sub=str(sub), email=claims.get("email"), claims=dict(claims))
+    return AuthUser(sub=str(sub), email=claims.get("email"))
 
 
 def get_current_user_required(

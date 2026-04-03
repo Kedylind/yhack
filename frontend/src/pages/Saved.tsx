@@ -5,7 +5,7 @@ import ProviderCard from '@/components/providers/ProviderCard';
 import { Bookmark } from 'lucide-react';
 import type { Provider, CostEstimate } from '@/types';
 
-// TODO: Fetch from API_BASE_URL/saved or /favorites
+// Placeholder until a saved-providers API exists.
 const MOCK_SAVED: { provider: Provider; estimate: CostEstimate }[] = [
   {
     provider: { id: '1', name: 'Boston Medical Center', specialty: ['Primary Care'], address: '1 Boston Medical Center Pl, Boston, MA', lat: 42.3346, lng: -71.0721, phone: '(617) 638-8000', inNetwork: true, distance: 1.2 },

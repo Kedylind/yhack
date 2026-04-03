@@ -1,27 +1,28 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import select
 
 from app.api.deps import DbDep
+from app.db.tables import Provider
 from app.models.api import ProviderListItem
 
 router = APIRouter()
 
 
-def _doc_to_item(doc: dict[str, Any]) -> ProviderListItem:
-    lng, lat = doc["location"]["coordinates"]
+def _row_to_item(p: Provider) -> ProviderListItem:
     return ProviderListItem(
-        id=doc["npi"],
-        name=doc["name"],
-        address=doc["address"],
-        city=doc["city"],
-        zip=doc["zip"],
-        lat=lat,
-        lng=lng,
-        phone=doc.get("phone"),
-        specialties=doc.get("specialties", []),
-        source=doc.get("source"),
-        hospital=doc.get("hospital"),
+        id=p.npi,
+        name=p.name,
+        address=p.address,
+        city=p.city,
+        zip=p.zip,
+        lat=p.lat,
+        lng=p.lng,
+        phone=p.phone,
+        specialties=list(p.specialties or []),
+        source=p.source,
+        hospital=p.hospital,
     )
 
 
@@ -42,15 +43,15 @@ def list_providers(
     hospital: str | None = Query(None),
 ) -> list[ProviderListItem]:
     _ = in_network_only
-    q: dict[str, Any] = {"specialties": "Gastroenterology"}
+    stmt = select(Provider).where(Provider.specialties.contains(["Gastroenterology"]))
     if hospital:
-        q["hospital"] = hospital.strip()
+        stmt = stmt.where(Provider.hospital == hospital.strip())
     if zip:
-        q["zip"] = zip.strip()
+        stmt = stmt.where(Provider.zip == zip.strip())
     if specialty and specialty.strip() and specialty.lower() not in ("all", "gastroenterology"):
-        q["specialties"] = specialty.strip()
+        stmt = stmt.where(Provider.specialties.contains([specialty.strip()]))
 
-    docs = list(db["providers"].find(q))
+    rows = list(db.scalars(stmt).all())
 
     if bbox:
         try:
@@ -59,19 +60,19 @@ def list_providers(
             raise HTTPException(
                 status_code=400, detail="bbox must be minLng,minLat,maxLng,maxLat"
             ) from e
-        filtered: list[dict[str, Any]] = []
-        for d in docs:
-            lng, lat = d["location"]["coordinates"]
+        filtered: list[Provider] = []
+        for p in rows:
+            lng, lat = p.lng, p.lat
             if min_lng <= lng <= max_lng and min_lat <= lat <= max_lat:
-                filtered.append(d)
-        docs = filtered
+                filtered.append(p)
+        rows = filtered
 
-    return [_doc_to_item(d) for d in docs]
+    return [_row_to_item(p) for p in rows]
 
 
 @router.get("/{provider_id}", response_model=ProviderListItem)
 def get_provider(provider_id: str, db: DbDep) -> ProviderListItem:
-    doc = db["providers"].find_one({"npi": provider_id})
-    if not doc:
+    p = db.get(Provider, provider_id)
+    if not p:
         raise HTTPException(status_code=404, detail="provider not found")
-    return _doc_to_item(doc)
+    return _row_to_item(p)

@@ -139,7 +139,24 @@ class ProvidersQuery(BaseModel):
     specialty: str | None = None
 
 
-# --- Users (Auth0 + Mongo profile) ---
+# --- Users (JWT + PostgreSQL profiles) ---
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=256)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    sub: str
+    email: EmailStr | None = None
 
 
 class UserMeResponse(BaseModel):

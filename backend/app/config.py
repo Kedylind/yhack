@@ -8,17 +8,14 @@ _BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    app_name: str = "Boston GI Healthcare Map API"
+    app_name: str = "CareCost API"
     app_version: str = "0.1.0"
     api_prefix: str = "/api"
 
-    mongodb_uri: str = "mongodb://localhost:27017"
-    mongodb_db_name: str = "boston_gi_demo"
+    database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/carecost"
     JWT_SECRET_KEY: str = "dev-secret-change-me"
-
-    AUTH0_DOMAIN: str = ""
-    AUTH0_AUDIENCE: str = ""
-    AUTH0_ISSUER: str = ""
+    jwt_issuer: str = "carecost-api"
+    jwt_access_ttl_minutes: int = 60
 
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"

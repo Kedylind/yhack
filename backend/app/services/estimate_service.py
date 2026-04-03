@@ -1,12 +1,14 @@
-"""Assemble estimate responses from Mongo price + provider data."""
+"""Assemble estimate responses from PostgreSQL price + provider data."""
 
 from __future__ import annotations
 
 from collections import defaultdict
 from typing import Any
 
-from pymongo.database import Database
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.db.tables import Price, Provider
 from app.models.api import (
     AllowedAmountRange,
     EstimateResponse,
@@ -25,24 +27,37 @@ from app.services.pricing import (
 from app.services.scenario_to_bundle import infer_scenario_id, scenario_to_bundle_id
 
 
-def _provider_to_api_dict(doc: dict[str, Any]) -> dict[str, Any]:
-    lng, lat = doc["location"]["coordinates"]
+def _provider_to_api_dict(p: Provider) -> dict[str, Any]:
     return {
-        "id": doc["npi"],
-        "name": doc["name"],
-        "address": doc["address"],
-        "city": doc["city"],
-        "zip": doc["zip"],
-        "lat": lat,
-        "lng": lng,
-        "phone": doc.get("phone"),
-        "specialties": doc.get("specialties", []),
-        "source": doc.get("source"),
+        "id": p.npi,
+        "name": p.name,
+        "address": p.address,
+        "city": p.city,
+        "zip": p.zip,
+        "lat": p.lat,
+        "lng": p.lng,
+        "phone": p.phone,
+        "specialties": list(p.specialties or []),
+        "source": p.source,
+    }
+
+
+def _price_row_dict(p: Price) -> dict[str, Any]:
+    return {
+        "provider_id": p.provider_id,
+        "bundle_id": p.bundle_id,
+        "min_rate_cents": p.min_rate_cents,
+        "max_rate_cents": p.max_rate_cents,
+        "payer": p.payer,
+        "source": p.source,
+        "confidence": p.confidence,
+        "effective_date": p.effective_date,
+        "mvp_hospital_id": p.mvp_hospital_id,
     }
 
 
 def build_estimate_response(
-    db: Database,
+    session: Session,
     intake_raw: dict[str, Any],
     confirmed: dict[str, Any] | None,
     explicit_bundle_id: str | None,
@@ -53,10 +68,13 @@ def build_estimate_response(
     scenario_id = explicit_scenario_id or infer_scenario_id(intake, confirmed)
     bundle_id = explicit_bundle_id or scenario_to_bundle_id(scenario_id)
 
-    # City-wide GI providers for comparison; ZIP is logistics only for v1 demo
-    provider_docs = list(db["providers"].find({"specialties": {"$in": ["Gastroenterology"]}}))
+    provider_rows = list(
+        session.scalars(
+            select(Provider).where(Provider.specialties.contains(["Gastroenterology"]))
+        ).all()
+    )
 
-    providers_out = [_provider_to_api_dict(p) for p in provider_docs]
+    providers_out = [_provider_to_api_dict(p) for p in provider_rows]
     estimates: list[ProviderEstimate] = []
 
     ded_cents = merged.get("deductible_cents")
@@ -81,17 +99,23 @@ def build_estimate_response(
         )
         return o_min, o_max, list(oop_asm)
 
-    # Batch price lookup: one query instead of N round-trips
-    all_npis = [p["npi"] for p in provider_docs]
-    batch_price_docs = list(
-        db["prices"].find({"provider_id": {"$in": all_npis}, "bundle_id": bundle_id})
-    )
+    all_npis = [p.npi for p in provider_rows]
+    batch_price_rows: list[Price] = []
+    if all_npis:
+        batch_price_rows = list(
+            session.scalars(
+                select(Price).where(
+                    Price.provider_id.in_(all_npis),
+                    Price.bundle_id == bundle_id,
+                )
+            ).all()
+        )
     prices_by_npi: dict[str, list[dict[str, Any]]] = {}
-    for pd in batch_price_docs:
-        prices_by_npi.setdefault(pd["provider_id"], []).append(pd)
+    for pd in batch_price_rows:
+        prices_by_npi.setdefault(pd.provider_id, []).append(_price_row_dict(pd))
 
-    for p in provider_docs:
-        npi = p["npi"]
+    for p in provider_rows:
+        npi = p.npi
         all_price_docs = prices_by_npi.get(npi, [])
 
         selected_docs = [x for x in all_price_docs if x.get("payer") == wanted_payer]

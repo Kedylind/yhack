@@ -3,9 +3,10 @@
 from typing import Any
 
 from fastapi import APIRouter, Query
+from sqlalchemy import func, select
 
 from app.api.deps import DbDep
-from app.services.insurance_options import build_insurance_options
+from app.db.tables import HospitalRate, Provider
 
 router = APIRouter()
 
@@ -32,7 +33,9 @@ _HOSPITAL_INFO: dict[str, dict[str, Any]] = {
 
 @router.get("/insurance-options")
 def get_insurance_options(db: DbDep) -> dict[str, Any]:
-    """Insurer keys/labels and BCBS plan names derived from `hospital_rates` (MongoDB)."""
+    """Insurer keys/labels and BCBS plan names derived from `hospital_rates`."""
+    from app.services.insurance_options import build_insurance_options
+
     return build_insurance_options(db)
 
 
@@ -42,17 +45,16 @@ def list_hospitals(
     cpt: str = Query("45378", description="CPT code for pricing (default: screening colonoscopy)"),
 ) -> list[dict[str, Any]]:
     """Return one entry per hospital with exact coordinates and pricing."""
-    # Count doctors per hospital (no coordinate math needed)
-    pipeline = [
-        {"$match": {"hospital": {"$exists": True, "$ne": ""}}},
-        {"$group": {"_id": "$hospital", "doctor_count": {"$sum": 1}}},
-    ]
-    counts = {h["_id"]: h["doctor_count"] for h in db["providers"].aggregate(pipeline)}
+    rows = db.execute(
+        select(Provider.hospital, func.count())
+        .where(Provider.hospital != "")
+        .where(Provider.hospital.isnot(None))
+        .group_by(Provider.hospital)
+    ).all()
+    counts = {h: int(cnt) for h, cnt in rows if h}
 
-    # Get pricing for requested CPT
-    rates_by_id = {}
-    for rate in db["hospital_rates"].find({"cpt": cpt}):
-        rates_by_id[rate["hospital_id"]] = rate
+    rates_list = db.scalars(select(HospitalRate).where(HospitalRate.cpt == cpt)).all()
+    rates_by_id = {r.hospital_id: r for r in rates_list}
 
     results = []
     for name, count in counts.items():
@@ -62,7 +64,20 @@ def list_hospitals(
         if lat is None or lng is None:
             continue
         hid = info.get("id")
-        rate = rates_by_id.get(hid, {}) if hid else {}
+        rate = rates_by_id.get(hid, None) if hid else None
+        rate_d: dict[str, Any] = {}
+        if rate is not None:
+            rate_d = {
+                "bcbs_price": rate.bcbs_price,
+                "aetna_price": rate.aetna_price,
+                "harvard_pilgrim_price": rate.harvard_pilgrim_price,
+                "uhc_price": rate.uhc_price,
+                "de_identified_min": rate.de_identified_min,
+                "de_identified_max": rate.de_identified_max,
+                "gross_charge": rate.gross_charge,
+                "discounted_cash": rate.discounted_cash,
+                "cpt_desc": rate.cpt_desc or "",
+            }
         results.append(
             {
                 "name": name,
@@ -70,16 +85,16 @@ def list_hospitals(
                 "lat": lat,
                 "lng": lng,
                 "doctor_count": count,
-                "bcbs_price": rate.get("bcbs_price"),
-                "aetna_price": rate.get("aetna_price"),
-                "harvard_pilgrim_price": rate.get("harvard_pilgrim_price"),
-                "uhc_price": rate.get("uhc_price"),
-                "de_identified_min": rate.get("de_identified_min"),
-                "de_identified_max": rate.get("de_identified_max"),
-                "gross_charge": rate.get("gross_charge"),
-                "discounted_cash": rate.get("discounted_cash"),
+                "bcbs_price": rate_d.get("bcbs_price"),
+                "aetna_price": rate_d.get("aetna_price"),
+                "harvard_pilgrim_price": rate_d.get("harvard_pilgrim_price"),
+                "uhc_price": rate_d.get("uhc_price"),
+                "de_identified_min": rate_d.get("de_identified_min"),
+                "de_identified_max": rate_d.get("de_identified_max"),
+                "gross_charge": rate_d.get("gross_charge"),
+                "discounted_cash": rate_d.get("discounted_cash"),
                 "cpt": cpt,
-                "cpt_desc": rate.get("cpt_desc", ""),
+                "cpt_desc": rate_d.get("cpt_desc", ""),
             }
         )
 
