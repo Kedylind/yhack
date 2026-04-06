@@ -49,6 +49,9 @@ const Navbar = () => {
           <Link to="/team">
             <Button variant="ghost" size="sm">Team</Button>
           </Link>
+          <Link to="/our-approach">
+            <Button variant="ghost" size="sm">Our Approach</Button>
+          </Link>
           <Link to="/our-data">
             <Button variant="ghost" size="sm">Our Data</Button>
           </Link>
@@ -104,6 +107,9 @@ const Navbar = () => {
                 </Link>
                 <Link to="/team" onClick={closeMobile}>
                   <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Team</Button>
+                </Link>
+                <Link to="/our-approach" onClick={closeMobile}>
+                  <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Our Approach</Button>
                 </Link>
                 <Link to="/our-data" onClick={closeMobile}>
                   <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Our Data</Button>

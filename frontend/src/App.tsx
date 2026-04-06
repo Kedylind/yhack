@@ -17,6 +17,7 @@ import NotFound from "./pages/NotFound";
 import WhyItMatters from "./pages/WhyItMatters";
 import Team from "./pages/Team";
 import OurData from "./pages/OurData";
+import ProductVision from "./pages/ProductVision";
 import RequireFullProfile from "@/components/RequireFullProfile";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/why-it-matters" element={<WhyItMatters />} />
             <Route path="/team" element={<Team />} />
             <Route path="/our-data" element={<OurData />} />
+            <Route path="/our-approach" element={<ProductVision />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/callback" element={<AuthCallback />} />
