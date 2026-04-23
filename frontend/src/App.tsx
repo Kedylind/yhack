@@ -8,7 +8,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import AuthCallback from "./pages/AuthCallback";
+// AuthCallback removed (JWT auth, no OAuth redirect)
 import Onboarding from "./pages/Onboarding";
 import MapPage from "./pages/MapPage";
 import Saved from "./pages/Saved";
@@ -38,7 +38,7 @@ const App = () => (
             <Route path="/our-approach" element={<ProductVision />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-            <Route path="/callback" element={<AuthCallback />} />
+            {/* /callback removed — JWT auth, no redirect */}
             <Route path="/onboarding" element={<Onboarding />} />
             <Route
               path="/map"

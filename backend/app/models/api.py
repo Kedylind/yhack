@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, EmailStr
-from datetime import datetime
 
 # --- Intake ---
 
@@ -139,7 +138,26 @@ class ProvidersQuery(BaseModel):
     specialty: str | None = None
 
 
-# --- Users (Auth0 + Mongo profile) ---
+# --- Auth ---
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=6)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    sub: str
+    email: str | None = None
+
+
+# --- Users ---
 
 
 class UserMeResponse(BaseModel):

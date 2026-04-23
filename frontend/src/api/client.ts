@@ -37,6 +37,28 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+// --- Auth (JWT) ---
+
+export type TokenResponseApi = {
+  access_token: string;
+  sub: string;
+  email: string | null;
+};
+
+export async function apiRegister(email: string, password: string): Promise<TokenResponseApi> {
+  return json<TokenResponseApi>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function apiLogin(email: string, password: string): Promise<TokenResponseApi> {
+  return json<TokenResponseApi>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
 export type UserMeApi = {
   sub: string;
   email: string | null;

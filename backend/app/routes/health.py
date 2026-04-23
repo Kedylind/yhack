@@ -9,13 +9,15 @@ router = APIRouter()
 
 @router.get("/health")
 def health() -> dict[str, Any]:
-    """Includes safe DB hints so you can confirm the API matches import_csv (same Atlas vs local)."""
     s = get_settings()
-    uri = s.mongodb_uri
-    mode = "atlas" if "mongodb+srv" in uri else ("local" if "localhost" in uri or "127.0.0.1" in uri else "custom")
+    db_url = s.database_url
+    mode = (
+        "railway"
+        if "railway" in db_url
+        else ("local" if "localhost" in db_url or "127.0.0.1" in db_url else "custom")
+    )
     return {
         "status": "ok",
-        "mongodb_db_name": s.mongodb_db_name,
-        "mongodb_connection_mode": mode,
+        "db_mode": mode,
         "lava_configured": bool(s.lava_api_key),
     }

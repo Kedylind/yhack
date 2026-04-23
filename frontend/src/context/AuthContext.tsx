@@ -1,9 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
 import type { UserProfile, InsuranceProfile } from '@/types';
 import { clearAllGiContinuityForLogout } from '@/lib/giContinuity';
-import { isAuth0Configured } from '@/config/auth';
 import {
+  apiLogin,
+  apiRegister,
   fetchUserMe,
   insuranceProfileFromApi,
   insuranceProfileToApi,
@@ -14,20 +14,19 @@ import {
 } from '@/api/client';
 import { isInsuranceProfileComplete, isUserProfileComplete } from '@/lib/profileComplete';
 
+const TOKEN_KEY = 'carecost_token';
+
 interface AuthState {
   isAuthenticated: boolean;
   user: { email: string } | null;
   profile: UserProfile | null;
   insurance: InsuranceProfile | null;
   onboardingComplete: boolean;
-  /** Normalized intake payload for /api/estimate (demo; client-only). */
   intakePayload: Record<string, unknown> | null;
 }
 
 interface AuthContextType extends AuthState {
-  /** Auth0: false until first `/users/me` finishes after login. Legacy: always true. */
   meReady: boolean;
-  /** Auth0: redirect to Universal Login. Legacy: stub sign-in (email/password ignored for password). */
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -54,94 +53,28 @@ const initialState: AuthState = {
   intakePayload: null,
 };
 
-function LegacyAuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>(initialState);
-
-  const meReady = true;
-
-  const login = useCallback(async (email: string, _password: string) => {
-    setState(s => ({ ...s, isAuthenticated: true, user: { email } }));
-  }, []);
-
-  const signup = useCallback(async (email: string, _password: string) => {
-    setState(s => ({ ...s, isAuthenticated: true, user: { email } }));
-  }, []);
-
-  const logout = useCallback(() => {
-    setState(s => {
-      clearAllGiContinuityForLogout(s.user?.email);
-      return { ...initialState };
-    });
-  }, []);
-
-  const setIntakePayload = useCallback((intakePayload: Record<string, unknown> | null) => {
-    setState(s => ({ ...s, intakePayload }));
-  }, []);
-
-  const setProfile = useCallback((profile: UserProfile) => {
-    setState(s => ({ ...s, profile }));
-  }, []);
-
-  const setInsurance = useCallback((insurance: InsuranceProfile) => {
-    setState(s => ({ ...s, insurance }));
-  }, []);
-
-  const completeOnboarding = useCallback(() => {
-    setState(s => ({ ...s, onboardingComplete: true }));
-  }, []);
-
-  return (
-    <AuthContext.Provider
-      value={{
-        ...state,
-        meReady,
-        login,
-        logout,
-        signup,
-        setProfile,
-        setInsurance,
-        setIntakePayload,
-        completeOnboarding,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user, loginWithRedirect, logout: auth0Logout, getAccessTokenSilently } =
-    useAuth0();
-  const audience = import.meta.env.VITE_AUTH0_AUDIENCE ?? '';
-
-  const [state, setState] = useState<AuthState>({
-    ...initialState,
-    isAuthenticated: false,
-  });
-  const [meReady, setMeReady] = useState(false);
-
-  useEffect(() => {
-    setState(s => ({ ...s, isAuthenticated }));
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    const email = user?.email ?? '';
-    setState(s => ({ ...s, user: isAuthenticated && email ? { email } : null }));
-  }, [isAuthenticated, user?.email]);
-
-  useEffect(() => {
-    setApiAccessTokenGetter(async () => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, setState] = useState<AuthState>(() => {
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    if (token) {
       try {
-        return await getAccessTokenSilently({ authorizationParams: { audience } });
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return { ...initialState, isAuthenticated: true, user: { email: payload.email || '' } };
       } catch {
-        return null;
+        sessionStorage.removeItem(TOKEN_KEY);
       }
-    });
-    return () => setApiAccessTokenGetter(null);
-  }, [getAccessTokenSilently, audience]);
+    }
+    return initialState;
+  });
+  const [meReady, setMeReady] = useState(!state.isAuthenticated);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    setApiAccessTokenGetter(async () => sessionStorage.getItem(TOKEN_KEY));
+    return () => setApiAccessTokenGetter(null);
+  }, []);
+
+  useEffect(() => {
+    if (!state.isAuthenticated) {
       setMeReady(true);
       return;
     }
@@ -154,8 +87,7 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
         let up = userProfileFromApi(me.user_profile ?? undefined);
         const ins = insuranceProfileFromApi(me.insurance_profile ?? undefined);
         if (
-          up &&
-          ins &&
+          up && ins &&
           isUserProfileComplete(up) &&
           isInsuranceProfileComplete(ins) &&
           up.onboardingCompleted !== true
@@ -172,37 +104,33 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
           insurance: ins ?? s.insurance,
         }));
       } catch {
-        /* offline or API not configured */
+        /* API not available */
       } finally {
         if (!cancelled) setMeReady(true);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated]);
+    return () => { cancelled = true; };
+  }, [state.isAuthenticated]);
 
-  const login = useCallback(
-    async (_email: string, _password: string) => {
-      await loginWithRedirect();
-    },
-    [loginWithRedirect],
-  );
+  const login = useCallback(async (email: string, password: string) => {
+    const res = await apiLogin(email, password);
+    sessionStorage.setItem(TOKEN_KEY, res.access_token);
+    setState(s => ({ ...s, isAuthenticated: true, user: { email: res.email || email } }));
+  }, []);
 
-  const signup = useCallback(
-    async (_email: string, _password: string) => {
-      await loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } });
-    },
-    [loginWithRedirect],
-  );
+  const signup = useCallback(async (email: string, password: string) => {
+    const res = await apiRegister(email, password);
+    sessionStorage.setItem(TOKEN_KEY, res.access_token);
+    setState(s => ({ ...s, isAuthenticated: true, user: { email: res.email || email } }));
+  }, []);
 
   const logout = useCallback(() => {
     setState(s => {
       clearAllGiContinuityForLogout(s.user?.email);
       return { ...initialState };
     });
-    auth0Logout({ logoutParams: { returnTo: window.location.origin } });
-  }, [auth0Logout]);
+    sessionStorage.removeItem(TOKEN_KEY);
+  }, []);
 
   const setIntakePayload = useCallback((intakePayload: Record<string, unknown> | null) => {
     setState(s => ({ ...s, intakePayload }));
@@ -226,8 +154,8 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
         ...state,
         meReady,
         login,
-        signup,
         logout,
+        signup,
         setProfile,
         setInsurance,
         setIntakePayload,
@@ -236,29 +164,5 @@ function Auth0SessionProvider({ children }: { children: React.ReactNode }) {
     >
       {children}
     </AuthContext.Provider>
-  );
-}
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  if (!isAuth0Configured()) {
-    return <LegacyAuthProvider>{children}</LegacyAuthProvider>;
-  }
-  const domain = import.meta.env.VITE_AUTH0_DOMAIN!;
-  const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID!;
-  const aud = import.meta.env.VITE_AUTH0_AUDIENCE!;
-
-  return (
-    <Auth0Provider
-      domain={domain}
-      clientId={clientId}
-      authorizationParams={{
-        redirect_uri: `${window.location.origin}/callback`,
-        audience: aud,
-      }}
-      cacheLocation="localstorage"
-      useRefreshTokens
-    >
-      <Auth0SessionProvider>{children}</Auth0SessionProvider>
-    </Auth0Provider>
   );
 };

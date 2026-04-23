@@ -1,82 +1,33 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import CareCostLogo from '@/components/CareCostLogo';
-import { isAuth0Configured } from '@/config/auth';
 
-function SignupWithAuth0() {
-  const { signup } = useAuth();
-  const [loading, setLoading] = useState(false);
-
-  const handleAuth0 = async () => {
-    setLoading(true);
-    try {
-      await signup('', '');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex">
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/20 via-primary/10 to-background items-center justify-center p-12">
-        <div className="text-center">
-          <CareCostLogo showTagline />
-          <p className="mt-6 text-muted-foreground max-w-sm mx-auto">
-            Join thousands of patients taking control of their healthcare spending.
-          </p>
-        </div>
-      </div>
-
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-sm animate-fade-in">
-          <div className="lg:hidden mb-8">
-            <CareCostLogo showTagline />
-          </div>
-          <h1 className="text-2xl font-bold mb-1">Create your account</h1>
-          <p className="text-muted-foreground mb-8 text-sm">Start seeing personalized cost estimates</p>
-
-          <Button
-            type="button"
-            className="w-full bg-primary text-primary-foreground hover:bg-primary-hover h-11"
-            disabled={loading}
-            onClick={handleAuth0}
-          >
-            {loading ? 'Redirecting…' : 'Continue with Auth0'}
-          </Button>
-
-          <p className="text-sm text-muted-foreground text-center mt-6">
-            Already have an account?{' '}
-            <Link to="/login" className="text-primary font-medium hover:underline">
-              Log in
-            </Link>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SignupLegacy() {
+const Signup = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [terms, setTerms] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const { signup } = useAuth();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirm) return;
     if (!terms) return;
+    setError('');
     setLoading(true);
     try {
       await signup(email, password);
-      window.location.assign('/onboarding');
+      navigate('/onboarding');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Signup failed');
     } finally {
       setLoading(false);
     }
@@ -100,6 +51,12 @@ function SignupLegacy() {
           </div>
           <h1 className="text-2xl font-bold mb-1">Create your account</h1>
           <p className="text-muted-foreground mb-8 text-sm">Start seeing personalized cost estimates</p>
+
+          {error && (
+            <div className="mb-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -108,7 +65,7 @@ function SignupLegacy() {
             </div>
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} className="mt-1" />
+              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="mt-1" />
             </div>
             <div>
               <Label htmlFor="confirm">Confirm password</Label>
@@ -136,8 +93,6 @@ function SignupLegacy() {
       </div>
     </div>
   );
-}
-
-const Signup = () => (isAuth0Configured() ? <SignupWithAuth0 /> : <SignupLegacy />);
+};
 
 export default Signup;
