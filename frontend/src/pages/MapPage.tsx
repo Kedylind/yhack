@@ -611,6 +611,33 @@ const MapPage = () => {
                           const sources = getAllPriceSources(hData, insuranceCarrierLabel);
                           if (sources.length === 0) return null;
                           const isSourcesOpen = expandedSources.has(hospitalName);
+
+                          const kindDescriptions = {
+                            negotiated: '(insurer-hospital contract rate)',
+                            tic: '(insurer-reported, Transparency in Coverage)',
+                            cash: '(self-pay / uninsured discount)',
+                            de_identified: '(anonymized range across all payers)',
+                            gross: '(hospital list price before discounts)',
+                            benchmark: '(independent industry estimate)',
+                          };
+
+                          const sortedSources = [...sources].sort((a, b) => {
+                            const aIsFairHealth = a.label.includes('FAIR Health');
+                            const bIsFairHealth = b.label.includes('FAIR Health');
+                            if (aIsFairHealth && !bIsFairHealth) return 1;
+                            if (!aIsFairHealth && bIsFairHealth) return -1;
+                            return a.price - b.price;
+                          });
+
+                          const userCarrierKey = carrierKeyFromLabel(insuranceCarrierLabel);
+                          const carrierLabels: Record<string, string[]> = {
+                            bcbs: ['bcbs', 'blue cross'],
+                            aetna: ['aetna'],
+                            harvard_pilgrim: ['harvard pilgrim', 'harvard'],
+                            uhc: ['uhc', 'united'],
+                          };
+                          const matchTokens = carrierLabels[userCarrierKey] ?? [];
+
                           return (
                             <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs">
                               <button
@@ -631,12 +658,32 @@ const MapPage = () => {
                               </button>
                               {isSourcesOpen && (
                                 <div className="mt-1 space-y-0.5 max-h-[200px] overflow-y-auto">
-                                  {sources.map((src, i) => (
-                                    <div key={i} className="flex justify-between">
-                                      <span className="text-muted-foreground">{src.label}</span>
-                                      <span className="font-medium">${Math.round(src.price).toLocaleString()}</span>
-                                    </div>
-                                  ))}
+                                  {sortedSources.map((src, i) => {
+                                    const srcLower = src.label.toLowerCase();
+                                    const isUserInsurer = src.kind === 'negotiated' && matchTokens.some(t => srcLower.includes(t));
+                                    const isCash = src.kind === 'cash';
+
+                                    return (
+                                      <div
+                                        key={i}
+                                        className={`flex flex-col gap-0.5 px-2 py-1.5 rounded ${
+                                          isUserInsurer
+                                            ? 'bg-primary/10 border-l-2 border-primary'
+                                            : isCash
+                                            ? 'bg-green-50 dark:bg-green-950/30'
+                                            : ''
+                                        }`}
+                                      >
+                                        <div className="flex justify-between items-baseline">
+                                          <span className="text-muted-foreground">{src.label}</span>
+                                          <span className="font-medium">${Math.round(src.price).toLocaleString()}</span>
+                                        </div>
+                                        <span className="text-[10px] text-muted-foreground/70">
+                                          {kindDescriptions[src.kind]}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
