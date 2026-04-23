@@ -46,8 +46,11 @@ const Navbar = () => {
           <Link to="/">
             <Button variant="ghost" size="sm">Home</Button>
           </Link>
-          <Link to="/our-approach">
-            <Button variant="ghost" size="sm">Our Approach</Button>
+          <Link to="/why-it-matters">
+            <Button variant="ghost" size="sm">Why it matters</Button>
+          </Link>
+          <Link to="/team">
+            <Button variant="ghost" size="sm">Team</Button>
           </Link>
           <Link to="/our-data">
             <Button variant="ghost" size="sm">Our Data</Button>
@@ -96,8 +99,11 @@ const Navbar = () => {
                 <Link to="/" onClick={closeMobile}>
                   <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Home</Button>
                 </Link>
-                <Link to="/our-approach" onClick={closeMobile}>
-                  <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Our Approach</Button>
+                <Link to="/why-it-matters" onClick={closeMobile}>
+                  <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Why it matters</Button>
+                </Link>
+                <Link to="/team" onClick={closeMobile}>
+                  <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Team</Button>
                 </Link>
                 <Link to="/our-data" onClick={closeMobile}>
                   <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Our Data</Button>
