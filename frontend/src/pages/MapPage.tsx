@@ -429,7 +429,7 @@ const MapPage = () => {
                   void estimateQuery.refetch();
                   void hospitalsQuery.refetch();
                 }}
-                title="Reload providers from the API (use after re-seeding MongoDB)"
+                title="Reload data from API"
               >
                 <RefreshCw className={`w-4 h-4 ${providersQuery.isFetching ? 'animate-spin' : ''}`} />
               </Button>
