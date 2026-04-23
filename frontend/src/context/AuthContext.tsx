@@ -98,10 +98,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             insurance_profile: insuranceProfileToApi(ins),
           }).catch(() => {});
         }
+        const profileDone = up && ins && isUserProfileComplete(up) && isInsuranceProfileComplete(ins);
         setState(s => ({
           ...s,
           profile: up ?? s.profile,
           insurance: ins ?? s.insurance,
+          onboardingComplete: up?.onboardingCompleted === true || !!profileDone,
         }));
       } catch {
         /* API not available */
