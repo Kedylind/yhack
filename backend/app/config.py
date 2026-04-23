@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic import field_validator
@@ -6,12 +7,33 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
+def _default_database_url() -> str:
+    """Build a PostgreSQL URL from individual PG* env vars.
+
+    Falls back to DATABASE_URL if set, then to a localhost default for
+    local development.  The individual variables are always provided by
+    the Railway Postgres service on the private network, so this is the
+    most reliable way to construct the connection string in production.
+    """
+    explicit = os.environ.get("DATABASE_URL", "").strip()
+    if explicit:
+        return explicit
+
+    host = os.environ.get("PGHOST", "localhost")
+    port = os.environ.get("PGPORT", "5432")
+    user = os.environ.get("PGUSER", "postgres")
+    password = os.environ.get("PGPASSWORD", "postgres")
+    database = os.environ.get("PGDATABASE", "carecost")
+
+    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
+
 class Settings(BaseSettings):
     app_name: str = "Boston GI Healthcare Map API"
     app_version: str = "0.1.0"
     api_prefix: str = "/api"
 
-    database_url: str = "postgresql://postgres:postgres@localhost:5432/carecost"
+    database_url: str = _default_database_url()
     JWT_SECRET_KEY: str = "dev-secret-change-me"
     jwt_access_ttl_minutes: int = 1440
     jwt_issuer: str = "carecost"
