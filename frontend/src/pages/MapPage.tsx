@@ -557,7 +557,7 @@ const MapPage = () => {
                         {hospitalPayerPrice != null ? (
                           <span className="text-xs text-muted-foreground">{payerLabel} ${Math.round(hospitalPayerPrice).toLocaleString()}</span>
                         ) : (
-                          <span className="text-xs text-muted-foreground italic">Price not disclosed</span>
+                          <span className="text-xs text-muted-foreground italic">{payerLabel} price not disclosed</span>
                         )}
                         {hospitalOop ? (
                           <span className="text-xs text-primary ml-2 inline-flex items-center gap-0.5">

@@ -312,7 +312,7 @@ const ProviderCard = ({
 
       {!hasPrice && !compact && (
         <div className="bg-muted/30 border border-border rounded-xl px-4 py-3 mb-4">
-          <p className="text-xs text-muted-foreground italic">Price data was not disclosed by this provider</p>
+          <p className="text-xs text-muted-foreground italic">{insuranceLabel} price not disclosed by this provider</p>
         </div>
       )}
 
