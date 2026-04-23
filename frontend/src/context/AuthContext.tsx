@@ -15,6 +15,7 @@ import {
 import { isInsuranceProfileComplete, isUserProfileComplete } from '@/lib/profileComplete';
 
 const TOKEN_KEY = 'carecost_token';
+const INTAKE_KEY = 'carecost_intake';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -56,15 +57,17 @@ const initialState: AuthState = {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>(() => {
     const token = sessionStorage.getItem(TOKEN_KEY);
+    let savedIntake: Record<string, unknown> | null = null;
+    try { const raw = sessionStorage.getItem(INTAKE_KEY); if (raw) savedIntake = JSON.parse(raw); } catch { /* ignore */ }
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        return { ...initialState, isAuthenticated: true, user: { email: payload.email || '' } };
+        return { ...initialState, isAuthenticated: true, user: { email: payload.email || '' }, intakePayload: savedIntake };
       } catch {
         sessionStorage.removeItem(TOKEN_KEY);
       }
     }
-    return initialState;
+    return { ...initialState, intakePayload: savedIntake };
   });
   const [meReady, setMeReady] = useState(!state.isAuthenticated);
 
@@ -132,9 +135,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { ...initialState };
     });
     sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(INTAKE_KEY);
   }, []);
 
   const setIntakePayload = useCallback((intakePayload: Record<string, unknown> | null) => {
+    if (intakePayload) sessionStorage.setItem(INTAKE_KEY, JSON.stringify(intakePayload));
+    else sessionStorage.removeItem(INTAKE_KEY);
     setState(s => ({ ...s, intakePayload }));
   }, []);
 

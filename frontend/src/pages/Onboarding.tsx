@@ -182,8 +182,8 @@ const Onboarding = () => {
         user_profile: userProfileToApi(finishedProfile),
         insurance_profile: insuranceProfileToApi(insurance),
       });
-    } catch {
-      /* offline or API */
+    } catch (err) {
+      console.error('Profile save failed:', err);
     }
 
     const intake: Record<string, unknown> = {
