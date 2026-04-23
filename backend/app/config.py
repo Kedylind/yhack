@@ -11,7 +11,18 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     api_prefix: str = "/api"
 
-    database_url: str = "postgresql://postgres:postgres@localhost:5432/carecost"
+    database_url: str = ""
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def require_database_url(cls, v: object) -> object:
+        if not v:
+            raise ValueError(
+                "DATABASE_URL environment variable is not set. "
+                "A valid PostgreSQL connection string is required."
+            )
+        return v
+
     JWT_SECRET_KEY: str = "dev-secret-change-me"
     jwt_access_ttl_minutes: int = 1440
     jwt_issuer: str = "carecost"
