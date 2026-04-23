@@ -49,15 +49,13 @@ const Index = () => (
         <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-md mx-auto sm:max-w-none">
           <Link to="/signup" className="w-full sm:w-auto touch-manipulation">
             <Button size="lg" className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary-hover px-8 min-h-12 h-12 text-base rounded-full">
-              Get started free
-            </Button>
-          </Link>
-          <Link to="/login" className="w-full sm:w-auto touch-manipulation">
-            <Button variant="outline" size="lg" className="w-full sm:w-auto px-8 min-h-12 h-12 text-base rounded-full">
-              Log in
+              See real prices
             </Button>
           </Link>
         </div>
+        <p className="text-sm text-muted-foreground mt-6 tracking-wide">
+          13 hospitals &middot; 37 CPT codes &middot; 6 independent data sources
+        </p>
       </div>
     </section>
 

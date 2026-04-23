@@ -18,7 +18,6 @@ import {
   postIntake,
   userProfileToApi,
 } from '@/api/client';
-import { isAuth0Configured } from '@/config/auth';
 import { maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
 import {
   DEFAULT_SPECIALTY_ID,
@@ -83,8 +82,7 @@ const Onboarding = () => {
 
   useEffect(() => {
     if (!isAuthenticated || !meReady) return;
-    const auth0 = isAuth0Configured();
-    const wizardDone = auth0 ? authProfile?.onboardingCompleted === true : onboardingComplete;
+    const wizardDone = onboardingComplete;
     if (
       wizardDone &&
       isUserProfileComplete(authProfile) &&
@@ -179,15 +177,13 @@ const Onboarding = () => {
     saveProfile(finishedProfile);
     saveInsurance(insurance);
 
-    if (isAuth0Configured()) {
-      try {
-        await patchUserMe({
-          user_profile: userProfileToApi(finishedProfile),
-          insurance_profile: insuranceProfileToApi(insurance),
-        });
-      } catch {
-        /* offline or API */
-      }
+    try {
+      await patchUserMe({
+        user_profile: userProfileToApi(finishedProfile),
+        insurance_profile: insuranceProfileToApi(insurance),
+      });
+    } catch {
+      /* offline or API */
     }
 
     const intake: Record<string, unknown> = {
@@ -216,7 +212,7 @@ const Onboarding = () => {
     setDone(true);
   };
 
-  if (isAuth0Configured() && isAuthenticated && !meReady) {
+  if (isAuthenticated && !meReady) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />

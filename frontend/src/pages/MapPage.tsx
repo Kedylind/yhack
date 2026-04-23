@@ -97,7 +97,9 @@ const MapPage = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
 
-  const selectedSpecialty = (intakePayload?.specialty as string) || (intakePayload?.care_focus as string) || 'Gastroenterology';
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>(
+    () => (intakePayload?.specialty as string) || (intakePayload?.care_focus as string) || 'Gastroenterology',
+  );
 
   // Derive plan config for rule-aware OOP calculation
   const activePlanConfig = useMemo<PlanConfig | undefined>(() => {
@@ -168,10 +170,11 @@ const MapPage = () => {
   });
 
   const estimatesLackRates = useMemo(() => {
+    if (hospitals.some(h => h.bcbs_price != null || h.aetna_price != null || h.discounted_cash != null)) return false;
     const rows = estimateQuery.data?.estimates ?? [];
     if (rows.length === 0 || estimateQuery.isError) return false;
     return !rows.some(r => r.allowed_amount_range.max > 0 || r.oop_range.max > 0);
-  }, [estimateQuery.data, estimateQuery.isError]);
+  }, [estimateQuery.data, estimateQuery.isError, hospitals]);
 
   const estimateById = useMemo(() => {
     const m = new Map<string, ReturnType<typeof apiEstimateToCostEstimate>>();
@@ -213,14 +216,24 @@ const MapPage = () => {
     return hospitalGroups;
   }, [filtered, hospitals]);
 
-  // Collapse ALL hospitals by default when data loads
+  // Collapse all hospitals by default, then auto-expand the cheapest one
   useEffect(() => {
-    if (hospitals.length > 0) {
-      const all = new Set(hospitals.map(h => h.name));
-      all.add('Independent Providers');
-      setCollapsedHospitals(all);
+    if (hospitals.length === 0) return;
+    const all = new Set(hospitals.map(h => h.name));
+    all.add('Independent Providers');
+
+    const priceFor = (h: HospitalApi) => getPayerPrice(h, insuranceCarrierLabel) ?? h.bcbs_price ?? h.discounted_cash;
+    const cheapest = [...hospitals]
+      .filter(h => priceFor(h) != null)
+      .sort((a, b) => (priceFor(a) ?? Infinity) - (priceFor(b) ?? Infinity))[0];
+
+    if (cheapest) {
+      all.delete(cheapest.name);
+      setExpandedSources(new Set([cheapest.name]));
+      setScrollToHospital(cheapest.name);
     }
-  }, [hospitals]);
+    setCollapsedHospitals(all);
+  }, [hospitals, insuranceCarrierLabel]);
 
   // Scroll to hospital after pin click — wait for expand animation, then scroll header to top
   useEffect(() => {
@@ -355,10 +368,10 @@ const MapPage = () => {
         <div
           className={`lg:w-[420px] lg:h-[calc(100vh-4rem)] bg-card border-l border-border overflow-y-auto ${showList ? 'block' : 'hidden lg:block'}`}
         >
-          <div className="p-4 border-b border-border space-y-3">
+          <div className="p-4 border-b border-border space-y-3 sticky top-0 bg-card z-10">
             {loadError && (
               <p className="text-sm text-destructive">
-                Could not load map data. Run the API on port 8000, ensure MongoDB is running, and seed providers
+                Could not load map data. Run the API on port 8000 and seed the database
                 (see the repo README). The Vite dev server proxies <code className="text-xs">/api</code> to{' '}
                 <code className="text-xs">127.0.0.1:8000</code>.
               </p>
@@ -374,10 +387,27 @@ const MapPage = () => {
               <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 rounded-lg px-3 py-2">
                 No hospital rates found in the database for this CPT/bundle — pins cannot show dollars. From the repo
                 root run{' '}
-                <code className="text-[11px] bg-background/80 px-1 rounded">python scripts/import_csv_to_mongo.py --az-mvp</code>{' '}
-                (same Mongo as the API), then refresh.
+                <code className="text-[11px] bg-background/80 px-1 rounded">python scripts/import_csv_to_postgres.py --az-mvp</code>{' '}
+                then refresh.
               </p>
             )}
+            <Select
+              value={selectedSpecialty}
+              onValueChange={(val) => {
+                setSelectedSpecialty(val);
+                const firstProc = val === 'Dermatology' ? DERM_PROCEDURES[0] : EGD_PROCEDURES[0];
+                if (firstProc) setSelectedCrt({ cpt: firstProc.cpt, label: firstProc.label, bundleId: firstProc.bundleId });
+                setExpandedSources(new Set());
+              }}
+            >
+              <SelectTrigger className="w-full text-sm h-11 border-primary/20 font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Gastroenterology">Gastroenterology</SelectItem>
+                <SelectItem value="Dermatology">Dermatology</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="flex items-center gap-2">
               <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -556,7 +586,7 @@ const MapPage = () => {
                       <span className="text-xs text-muted-foreground">{hospitalProviders.length}</span>
                     </button>
                     {!isCollapsed && (
-                      <div className="mt-2 space-y-2 pl-2">
+                      <div className="mt-2 space-y-3 pl-2">
                         {/* Price range with info tooltip */}
                         {hData?.de_identified_min != null && hData?.de_identified_max != null ? (
                           <div className="bg-primary/5 border border-primary/15 rounded-lg px-3 py-2 text-xs flex items-center gap-1">
@@ -597,7 +627,7 @@ const MapPage = () => {
                                 className="flex items-center gap-1 font-semibold text-muted-foreground uppercase tracking-wider text-[10px] hover:text-foreground transition-colors w-full"
                               >
                                 {isSourcesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                Price sources ({sources.length})
+                                All {sources.length} data sources
                               </button>
                               {isSourcesOpen && (
                                 <div className="mt-1 space-y-0.5 max-h-[200px] overflow-y-auto">
@@ -612,6 +642,33 @@ const MapPage = () => {
                             </div>
                           );
                         })()}
+                        {hData && (
+                          <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs">
+                            <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px] mb-1.5">All insurers</p>
+                            <div className="grid grid-cols-4 gap-1.5 text-center">
+                              {(() => {
+                                const entries = [
+                                  ['BCBS', hData.bcbs_price, 'bcbs'],
+                                  ['Aetna', hData.aetna_price, 'aetna'],
+                                  ['Harvard Pilgrim', hData.harvard_pilgrim_price, 'harvard_pilgrim'],
+                                  ['UHC', hData.uhc_price, 'uhc'],
+                                ] as const;
+                                const prices = entries.map(e => e[1]).filter((p): p is number => p != null);
+                                const lowest = prices.length > 0 ? Math.min(...prices) : null;
+                                return entries.map(([label, price, key]) => {
+                                  const isActive = carrierKeyFromLabel(insuranceCarrierLabel) === key;
+                                  const isCheapest = price != null && price === lowest;
+                                  return (
+                                    <div key={key} className={`rounded-md px-1 py-1.5 ${isActive ? 'bg-primary/10 ring-1 ring-primary/30' : ''}`}>
+                                      <p className="text-[10px] text-muted-foreground truncate">{label}</p>
+                                      <p className={`font-semibold ${isCheapest ? 'text-green-700' : ''}`}>{price != null ? `$${Math.round(price).toLocaleString()}` : 'N/A'}</p>
+                                    </div>
+                                  );
+                                });
+                              })()}
+                            </div>
+                          </div>
+                        )}
                         {hospitalProviders.map(p => (
                           <div key={p.id} onClick={() => setSelectedProvider(p)} className="cursor-pointer">
                             <ProviderCard

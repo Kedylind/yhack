@@ -15,7 +15,6 @@ import {
   userProfileToApi,
   type InsurerOptionApi,
 } from '@/api/client';
-import { isAuth0Configured } from '@/config/auth';
 import { maskUsDateDigits, parseUsDateToIso, isoToUsDisplay } from '@/lib/usDate';
 
 const FALLBACK_INSURERS: InsurerOptionApi[] = [
@@ -136,16 +135,14 @@ const Settings = () => {
     };
     setProfile(nextProfile);
     setInsurance(nextInsurance);
-    if (isAuth0Configured()) {
-      try {
-        await patchUserMe({
-          user_profile: userProfileToApi(nextProfile),
-          insurance_profile: insuranceProfileToApi(nextInsurance),
-        });
-      } catch {
-        toast.error('Could not sync profile to the server');
-        return;
-      }
+    try {
+      await patchUserMe({
+        user_profile: userProfileToApi(nextProfile),
+        insurance_profile: insuranceProfileToApi(nextInsurance),
+      });
+    } catch {
+      toast.error('Could not sync profile to the server');
+      return;
     }
     toast.success('Profile updated');
   };

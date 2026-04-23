@@ -42,7 +42,7 @@ export interface UserProfile {
   dob?: string;
   zip: string;
   phone?: string;
-  /** Set after full onboarding wizard; persisted with Auth0 user in Mongo. */
+  /** Set after full onboarding wizard. */
   onboardingCompleted?: boolean;
 }
 

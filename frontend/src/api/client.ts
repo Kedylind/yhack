@@ -6,7 +6,7 @@ export type AccessTokenGetter = () => Promise<string | null | undefined>;
 
 let accessTokenGetter: AccessTokenGetter | null = null;
 
-/** Called from AuthContext so API requests can attach `Authorization: Bearer` when logged in with Auth0. */
+/** Called from AuthContext so API requests can attach `Authorization: Bearer` when logged in. */
 export function setApiAccessTokenGetter(fn: AccessTokenGetter | null) {
   accessTokenGetter = fn;
 }

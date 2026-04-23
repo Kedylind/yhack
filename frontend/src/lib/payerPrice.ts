@@ -67,6 +67,18 @@ export function getAllPriceSources(hospital: HospitalApi, carrier: string): Pric
     hospital.masscomparecare_total_paid != null
       ? { label: 'MassCompareCare claims-paid', price: hospital.masscomparecare_total_paid, kind: 'benchmark' }
       : null,
+    hospital.fh_physician_in_network != null
+      ? { label: 'FAIR Health physician (in-network)', price: hospital.fh_physician_in_network, kind: 'benchmark' }
+      : null,
+    hospital.fh_facility_hosp_in_network != null
+      ? { label: 'FAIR Health facility (hospital)', price: hospital.fh_facility_hosp_in_network, kind: 'benchmark' }
+      : null,
+    hospital.fh_anesthesia_in_network != null
+      ? { label: 'FAIR Health anesthesia', price: hospital.fh_anesthesia_in_network, kind: 'benchmark' }
+      : null,
+    hospital.fh_pathology_in_network != null
+      ? { label: 'FAIR Health pathology', price: hospital.fh_pathology_in_network, kind: 'benchmark' }
+      : null,
   ];
 
   return sources.filter((s): s is PriceSource => s != null);
