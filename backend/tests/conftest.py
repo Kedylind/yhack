@@ -11,7 +11,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.api.deps import get_db_session
 from app.db.tables import Base
 from app.main import create_app
 from app.services.csv_import import import_sample_directory
@@ -66,7 +65,7 @@ def client(seeded_db: Session):
         yield seeded_db
 
     app = create_app()
-    app.dependency_overrides[get_db_session] = _override
+    app.dependency_overrides[get_db] = _override
     with TestClient(app) as tc:
         yield tc
     app.dependency_overrides.clear()
