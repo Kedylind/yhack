@@ -40,14 +40,7 @@ const App = () => (
             <Route path="/signup" element={<Signup />} />
             {/* /callback removed — JWT auth, no redirect */}
             <Route path="/onboarding" element={<Onboarding />} />
-            <Route
-              path="/map"
-              element={
-                <RequireFullProfile>
-                  <MapPage />
-                </RequireFullProfile>
-              }
-            />
+            <Route path="/map" element={<MapPage />} />
             <Route
               path="/saved"
               element={

@@ -80,6 +80,7 @@ const Settings = () => {
   }, []);
 
   useEffect(() => {
+    if (coverageLoading) return;
     setName(profile?.fullName || '');
     setZip(profile?.zip || '');
     setPhone(profile?.phone || '');
@@ -92,7 +93,7 @@ const Settings = () => {
     setOopMax(insurance?.oopMax ?? 0);
     setCopay(insurance?.copay ?? 0);
     setCoinsurance(insurance?.coinsurance ?? 0);
-  }, [profile, insurance]);
+  }, [profile, insurance, coverageLoading]);
 
   const selectedInsurerKey = useMemo(
     () => insurers.find(i => i.label === carrier)?.key ?? '',

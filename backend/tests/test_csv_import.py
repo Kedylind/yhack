@@ -7,7 +7,7 @@ import pytest
 from app.services.csv_import import import_az_directory, import_sample_directory
 from app.db.tables import Provider, HospitalRate
 
-SAMPLES = Path(__file__).resolve().parent.parent.parent / "data" / "samples"
+SAMPLES = Path(__file__).resolve().parent.parent.parent / "data" / "az-data"
 AZ_DATA = Path(__file__).resolve().parent.parent.parent / "data" / "az-data"
 
 

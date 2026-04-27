@@ -1,14 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu } from 'lucide-react';
+import { Menu, Settings, LogOut } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import CareCostLogo from '@/components/CareCostLogo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 
 const Navbar = () => {
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, profile, user, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [compactLogo, setCompactLogo] = useState(false);
@@ -22,6 +30,14 @@ const Navbar = () => {
   }, []);
 
   const closeMobile = () => setMobileOpen(false);
+
+  const initials = useMemo(() => {
+    const name = profile?.fullName || user?.email || '';
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }, [profile?.fullName, user?.email]);
 
   const navLinkClass = 'text-foreground justify-start font-medium';
   const sheetBtnClass = 'w-full h-12 justify-start text-base';
@@ -55,14 +71,41 @@ const Navbar = () => {
           <Link to="/our-data">
             <Button variant="ghost" size="sm">Our Data</Button>
           </Link>
+          <Link to="/map">
+            <Button variant="ghost" size="sm">Map</Button>
+          </Link>
           {isAuthenticated ? (
             <>
-              <Link to="/map">
-                <Button variant="ghost" size="sm">Map</Button>
+              <Link to="/saved">
+                <Button variant="ghost" size="sm">Saved</Button>
               </Link>
-              <Button variant="outline" size="sm" onClick={() => { logout(); navigate('/'); }}>
-                Sign out
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings" className="flex items-center gap-2 cursor-pointer">
+                      <Settings className="h-4 w-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="flex items-center gap-2 cursor-pointer"
+                    onClick={() => { logout(); navigate('/'); }}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           ) : (
             <>
@@ -108,10 +151,16 @@ const Navbar = () => {
                 <Link to="/our-data" onClick={closeMobile}>
                   <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Our Data</Button>
                 </Link>
+                <Link to="/map" onClick={closeMobile}>
+                  <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Map</Button>
+                </Link>
                 {isAuthenticated ? (
                   <>
-                    <Link to="/map" onClick={closeMobile}>
-                      <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Map</Button>
+                    <Link to="/saved" onClick={closeMobile}>
+                      <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Saved</Button>
+                    </Link>
+                    <Link to="/settings" onClick={closeMobile}>
+                      <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Settings</Button>
                     </Link>
                     <Button
                       variant="outline"

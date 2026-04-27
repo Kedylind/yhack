@@ -35,14 +35,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Import CSV fixtures into PostgreSQL")
     parser.add_argument(
         "--data-dir",
-        default=os.environ.get("DATA_DIR", str(ROOT / "data" / "samples")),
+        default=os.environ.get("DATA_DIR", str(ROOT / "data" / "az-data")),
     )
     parser.add_argument(
         "--az-mvp",
         action="store_true",
+        default=True,
         help="Load data/az-data (NPI providers + hospital_rates + per-NPI prices)",
     )
-    parser.add_argument("--seed-dir", default=str(ROOT / "data" / "samples"))
+    parser.add_argument("--seed-dir", default=str(ROOT / "data" / "az-data"))
     parser.add_argument("--price-hospital-id", default="bmc")
     args = parser.parse_args()
 
@@ -69,9 +70,7 @@ def main() -> int:
             if not az_dir.is_dir():
                 print(f"Error: AZ data directory not found: {az_dir}", file=sys.stderr)
                 return 1
-            counts = import_az_directory(
-                db, az_dir, price_hospital_id=args.price_hospital_id
-            )
+            counts = import_az_directory(db, az_dir, price_hospital_id=args.price_hospital_id)
         else:
             if not data_dir.is_dir():
                 print(f"Error: data directory not found: {data_dir}", file=sys.stderr)
