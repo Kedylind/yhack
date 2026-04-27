@@ -1,22 +1,36 @@
-"""Deterministic scenario → CPT bundle mapping."""
+"""Deterministic scenario → CPT bundle mapping (multi-specialty)."""
 
 from __future__ import annotations
 
 from typing import Any
 
-# Closed set for LLM / intake (must match keys used in prices import / decision tree).
-SCENARIO_IDS = (
-    "colonoscopy_screening",
-    "colonoscopy_diagnostic",
-    "colonoscopy_with_biopsy",
-    "colonoscopy_polyp",
-    "egd_with_biopsy",
-    "egd_bleeding",
-    "egd_dilation",
-    "gi_imaging_ct",
-    "capsule_endoscopy",
-    "gi_general",
+from app.services.specialty_config import SPECIALTY_CONFIG
+
+# All valid scenario IDs across specialties
+SCENARIO_IDS: tuple[str, ...] = tuple(
+    sid for config in SPECIALTY_CONFIG.values() for sid in config["bundle_cpt"]
 )
+
+
+def _get_text(intake: dict[str, Any], confirmed: dict[str, Any] | None) -> str:
+    merged = {**(confirmed or {}), **intake}
+    return " ".join(
+        [
+            str(merged.get("free_text") or ""),
+            " ".join(merged.get("symptoms") or [])
+            if isinstance(merged.get("symptoms"), list)
+            else "",
+        ]
+    ).lower()
+
+
+def _detect_specialty(merged: dict[str, Any]) -> str:
+    """Detect specialty from intake fields."""
+    explicit = merged.get("specialty") or merged.get("care_focus") or ""
+    s = explicit.lower()
+    if "derm" in s or "skin" in s:
+        return "Dermatology"
+    return "Gastroenterology"
 
 
 def infer_scenario_id(intake: dict[str, Any], confirmed: dict[str, Any] | None) -> str:
@@ -25,13 +39,15 @@ def infer_scenario_id(intake: dict[str, Any], confirmed: dict[str, Any] | None) 
     if isinstance(explicit, str) and explicit in SCENARIO_IDS:
         return explicit
 
-    text = " ".join(
-        [
-            str(merged.get("free_text") or ""),
-            " ".join(merged.get("symptoms") or []) if isinstance(merged.get("symptoms"), list) else "",
-        ]
-    ).lower()
+    specialty = _detect_specialty(merged)
+    text = _get_text(intake, confirmed)
 
+    if specialty == "Dermatology":
+        return _infer_derm_scenario(text)
+    return _infer_gi_scenario(text, merged)
+
+
+def _infer_gi_scenario(text: str, merged: dict[str, Any]) -> str:
     if any(x in text for x in ("screening", "preventive", "routine colon")):
         return "colonoscopy_screening"
     if any(x in text for x in ("bleeding", "pain", "diagnostic", "symptom")):
@@ -43,9 +59,29 @@ def infer_scenario_id(intake: dict[str, Any], confirmed: dict[str, Any] | None) 
     return "gi_general"
 
 
+def _infer_derm_scenario(text: str) -> str:
+    if any(x in text for x in ("mohs",)):
+        return "mohs_surgery_head_neck"
+    if any(x in text for x in ("wart", "cryo", "freeze", "destroy")):
+        return "lesion_destruction_first"
+    if any(x in text for x in ("mole", "excision")):
+        if "malig" in text:
+            return "mole_removal_malignant_small"
+        return "mole_removal_benign_small"
+    if any(x in text for x in ("biopsy", "suspicious", "lesion")):
+        if "punch" in text:
+            return "skin_biopsy_punch"
+        return "skin_biopsy_tangential"
+    if any(x in text for x in ("laser", "phototherapy", "light")):
+        return "phototherapy"
+    if any(x in text for x in ("rash", "eczema", "acne", "consult", "visit")):
+        return "derm_office_visit_detailed"
+    return "derm_office_visit_detailed"
+
+
 def scenario_to_bundle_id(scenario_id: str) -> str:
     if scenario_id == "gi_general":
         return "colonoscopy_screening"
-    if scenario_id in SCENARIO_IDS and scenario_id != "gi_general":
+    if scenario_id in SCENARIO_IDS:
         return scenario_id
     return "colonoscopy_screening"

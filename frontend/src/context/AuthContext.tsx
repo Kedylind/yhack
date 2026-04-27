@@ -1,26 +1,33 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { UserProfile, InsuranceProfile } from '@/types';
-import { getStoredToken, loginApi, registerApi, setStoredToken } from '@/api/auth';
 import { clearAllGiContinuityForLogout } from '@/lib/giContinuity';
 import {
+  apiLogin,
+  apiRegister,
   fetchUserMe,
   insuranceProfileFromApi,
+  insuranceProfileToApi,
+  patchUserMe,
   setApiAccessTokenGetter,
   userProfileFromApi,
+  userProfileToApi,
 } from '@/api/client';
+import { isInsuranceProfileComplete, isUserProfileComplete } from '@/lib/profileComplete';
+
+const TOKEN_KEY = 'carecost_token';
+const INTAKE_KEY = 'carecost_intake';
 
 interface AuthState {
   isAuthenticated: boolean;
   user: { email: string } | null;
   profile: UserProfile | null;
   insurance: InsuranceProfile | null;
-  meLoaded: boolean;
   onboardingComplete: boolean;
-  /** Normalized intake payload for /api/estimate (demo; client-only). */
   intakePayload: Record<string, unknown> | null;
 }
 
 interface AuthContextType extends AuthState {
+  meReady: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -43,87 +50,97 @@ const initialState: AuthState = {
   user: null,
   profile: null,
   insurance: null,
-  meLoaded: false,
   onboardingComplete: false,
   intakePayload: null,
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(() => getStoredToken());
-  const tokenRef = useRef<string | null>(token);
-  const [state, setState] = useState<AuthState>({ ...initialState });
+  const [state, setState] = useState<AuthState>(() => {
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    let savedIntake: Record<string, unknown> | null = null;
+    try { const raw = sessionStorage.getItem(INTAKE_KEY); if (raw) savedIntake = JSON.parse(raw); } catch { /* ignore */ }
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return { ...initialState, isAuthenticated: true, user: { email: payload.email || '' }, intakePayload: savedIntake };
+      } catch {
+        sessionStorage.removeItem(TOKEN_KEY);
+      }
+    }
+    return { ...initialState, intakePayload: savedIntake };
+  });
+  const [meReady, setMeReady] = useState(!state.isAuthenticated);
 
   useEffect(() => {
-    tokenRef.current = token;
-  }, [token]);
-
-  useEffect(() => {
-    setApiAccessTokenGetter(async () => tokenRef.current);
+    setApiAccessTokenGetter(async () => sessionStorage.getItem(TOKEN_KEY));
     return () => setApiAccessTokenGetter(null);
   }, []);
 
   useEffect(() => {
-    if (!token) {
-      setState(s => ({
-        ...initialState,
-        meLoaded: true,
-        onboardingComplete: s.onboardingComplete,
-        intakePayload: s.intakePayload,
-      }));
+    if (!state.isAuthenticated) {
+      setMeReady(true);
       return;
     }
+    setMeReady(false);
     let cancelled = false;
-    setState(s => ({ ...s, isAuthenticated: true, meLoaded: false }));
     (async () => {
       try {
         const me = await fetchUserMe();
         if (cancelled) return;
-        const up = userProfileFromApi(me.user_profile ?? undefined);
+        let up = userProfileFromApi(me.user_profile ?? undefined);
         const ins = insuranceProfileFromApi(me.insurance_profile ?? undefined);
+        if (
+          up && ins &&
+          isUserProfileComplete(up) &&
+          isInsuranceProfileComplete(ins) &&
+          up.onboardingCompleted !== true
+        ) {
+          up = { ...up, onboardingCompleted: true };
+          void patchUserMe({
+            user_profile: userProfileToApi(up),
+            insurance_profile: insuranceProfileToApi(ins),
+          }).catch(() => {});
+        }
+        const profileDone = up && ins && isUserProfileComplete(up) && isInsuranceProfileComplete(ins);
         setState(s => ({
           ...s,
-          user: me.email ? { email: me.email } : s.user,
           profile: up ?? s.profile,
           insurance: ins ?? s.insurance,
-          meLoaded: true,
+          onboardingComplete: up?.onboardingCompleted === true || !!profileDone,
         }));
       } catch {
-        if (!cancelled) {
-          setStoredToken(null);
-          setToken(null);
-          setState(s => ({ ...initialState, meLoaded: true, intakePayload: s.intakePayload }));
-        }
+        /* API not available */
+      } finally {
+        if (!cancelled) setMeReady(true);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+    return () => { cancelled = true; };
+  }, [state.isAuthenticated]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await loginApi(email, password);
-    setStoredToken(res.access_token);
-    setToken(res.access_token);
-    setState(s => ({ ...s, user: { email } }));
+    const res = await apiLogin(email, password);
+    sessionStorage.setItem(TOKEN_KEY, res.access_token);
+    setState(s => ({ ...s, isAuthenticated: true, user: { email: res.email || email } }));
   }, []);
 
   const signup = useCallback(async (email: string, password: string) => {
-    const res = await registerApi(email, password);
-    setStoredToken(res.access_token);
-    setToken(res.access_token);
-    setState(s => ({ ...s, user: { email } }));
+    const res = await apiRegister(email, password);
+    sessionStorage.setItem(TOKEN_KEY, res.access_token);
+    setState(s => ({ ...s, isAuthenticated: true, user: { email: res.email || email } }));
   }, []);
 
   const logout = useCallback(() => {
-    setStoredToken(null);
-    setToken(null);
     setState(s => {
       clearAllGiContinuityForLogout(s.user?.email);
-      return { ...initialState, meLoaded: true };
+      return { ...initialState };
     });
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(INTAKE_KEY);
   }, []);
 
   const setIntakePayload = useCallback((intakePayload: Record<string, unknown> | null) => {
+    if (intakePayload) sessionStorage.setItem(INTAKE_KEY, JSON.stringify(intakePayload));
+    else sessionStorage.removeItem(INTAKE_KEY);
     setState(s => ({ ...s, intakePayload }));
   }, []);
 
@@ -143,9 +160,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         ...state,
+        meReady,
         login,
-        signup,
         logout,
+        signup,
         setProfile,
         setInsurance,
         setIntakePayload,

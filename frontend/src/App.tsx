@@ -8,6 +8,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+// AuthCallback removed (JWT auth, no OAuth redirect)
 import Onboarding from "./pages/Onboarding";
 import MapPage from "./pages/MapPage";
 import Saved from "./pages/Saved";
@@ -16,6 +17,8 @@ import NotFound from "./pages/NotFound";
 import WhyItMatters from "./pages/WhyItMatters";
 import Team from "./pages/Team";
 import OurData from "./pages/OurData";
+import ProductVision from "./pages/ProductVision";
+import RequireFullProfile from "@/components/RequireFullProfile";
 
 const queryClient = new QueryClient();
 
@@ -32,11 +35,27 @@ const App = () => (
             <Route path="/why-it-matters" element={<WhyItMatters />} />
             <Route path="/team" element={<Team />} />
             <Route path="/our-data" element={<OurData />} />
+            <Route path="/our-approach" element={<ProductVision />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            {/* /callback removed — JWT auth, no redirect */}
             <Route path="/onboarding" element={<Onboarding />} />
-            <Route path="/map" element={<MapPage />} />
-            <Route path="/saved" element={<Saved />} />
+            <Route
+              path="/map"
+              element={
+                <RequireFullProfile>
+                  <MapPage />
+                </RequireFullProfile>
+              }
+            />
+            <Route
+              path="/saved"
+              element={
+                <RequireFullProfile>
+                  <Saved />
+                </RequireFullProfile>
+              }
+            />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

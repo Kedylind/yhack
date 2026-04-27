@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
@@ -7,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/context/AuthContext';
-import type { InsuranceProfile } from '@/types';
+import type { InsuranceProfile, UserProfile } from '@/types';
 import { toast } from 'sonner';
 import {
   fetchInsuranceOptions,
@@ -16,12 +15,26 @@ import {
   userProfileToApi,
   type InsurerOptionApi,
 } from '@/api/client';
-import { isBcbsInsurerKey } from '@/lib/insurance';
-import { isoToUsDisplay, maskUsDateDigits, parseUsDateToIso } from '@/lib/usDate';
+import { maskUsDateDigits, parseUsDateToIso, isoToUsDisplay } from '@/lib/usDate';
+
+const FALLBACK_INSURERS: InsurerOptionApi[] = [
+  { key: 'bcbs', label: 'Blue Cross Blue Shield (BCBS)', price_column: 'bcbs_price' },
+  { key: 'aetna', label: 'Aetna', price_column: 'aetna_price' },
+  { key: 'harvard_pilgrim', label: 'Harvard Pilgrim', price_column: 'harvard_pilgrim_price' },
+  { key: 'uhc', label: 'UnitedHealthcare (UHC)', price_column: 'uhc_price' },
+];
+
+const GENERIC_PLAN_FALLBACK = [
+  'Commercial PPO',
+  'Commercial HMO',
+  'Medicare Advantage',
+  'Other — see insurance card',
+];
+
+const BCBS_PLAN_FALLBACK = ['Plan name not listed in hospital data file'];
 
 const Settings = () => {
-  const { profile, insurance, setProfile, setInsurance, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
+  const { profile, insurance, setProfile, setInsurance } = useAuth();
   const [name, setName] = useState(profile?.fullName || '');
   const [zip, setZip] = useState(profile?.zip || '');
   const [phone, setPhone] = useState(profile?.phone || '');
@@ -31,22 +44,14 @@ const Settings = () => {
   const [planName, setPlanName] = useState(insurance?.planName || '');
   const [memberId, setMemberId] = useState(insurance?.memberId || '');
   const [planType, setPlanType] = useState<InsuranceProfile['planType']>(insurance?.planType || 'PPO');
-  const [deductible, setDeductible] = useState(insurance?.deductible || 0);
-  const [oopMax, setOopMax] = useState(insurance?.oopMax || 0);
-  const [copay, setCopay] = useState(insurance?.copay || 0);
-  const [coinsurance, setCoinsurance] = useState(insurance?.coinsurance || 0);
+  const [deductible, setDeductible] = useState(insurance?.deductible ?? 0);
+  const [oopMax, setOopMax] = useState(insurance?.oopMax ?? 0);
+  const [copay, setCopay] = useState(insurance?.copay ?? 0);
+  const [coinsurance, setCoinsurance] = useState(insurance?.coinsurance ?? 0);
 
-  const [insurers, setInsurers] = useState<InsurerOptionApi[]>([]);
-  const [bcbsPlanOptions, setBcbsPlanOptions] = useState<string[]>([]);
-  const [coverageOptionsLoading, setCoverageOptionsLoading] = useState(true);
-
-  /** Used when the API is unreachable or DB has no `hospital_rates` yet (build/deploy still works). */
-  const FALLBACK_INSURERS: InsurerOptionApi[] = [
-    { key: 'bcbs', label: 'Blue Cross Blue Shield (BCBS)', price_column: 'bcbs_price' },
-    { key: 'aetna', label: 'Aetna', price_column: 'aetna_price' },
-    { key: 'harvard_pilgrim', label: 'Harvard Pilgrim', price_column: 'harvard_pilgrim_price' },
-    { key: 'uhc', label: 'UnitedHealthcare (UHC)', price_column: 'uhc_price' },
-  ];
+  const [insurers, setInsurers] = useState<InsurerOptionApi[]>(FALLBACK_INSURERS);
+  const [planOptionsByInsurer, setPlanOptionsByInsurer] = useState<Record<string, string[]>>({});
+  const [coverageLoading, setCoverageLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,14 +60,18 @@ const Settings = () => {
         const data = await fetchInsuranceOptions();
         if (cancelled) return;
         setInsurers(data.insurers.length > 0 ? data.insurers : FALLBACK_INSURERS);
-        setBcbsPlanOptions(data.bcbs_plan_options);
+        const byIns: Record<string, string[]> = { ...(data.plan_options_by_insurer ?? {}) };
+        if ((byIns.bcbs?.length ?? 0) === 0 && data.bcbs_plan_options?.length) {
+          byIns.bcbs = data.bcbs_plan_options;
+        }
+        setPlanOptionsByInsurer(byIns);
       } catch {
         if (!cancelled) {
           setInsurers(FALLBACK_INSURERS);
-          setBcbsPlanOptions([]);
+          setPlanOptionsByInsurer({});
         }
       } finally {
-        if (!cancelled) setCoverageOptionsLoading(false);
+        if (!cancelled) setCoverageLoading(false);
       }
     })();
     return () => {
@@ -70,23 +79,51 @@ const Settings = () => {
     };
   }, []);
 
+  useEffect(() => {
+    setName(profile?.fullName || '');
+    setZip(profile?.zip || '');
+    setPhone(profile?.phone || '');
+    setDobDisplay(isoToUsDisplay(profile?.dob));
+    setCarrier(insurance?.carrier || '');
+    setPlanName(insurance?.planName || '');
+    setMemberId(insurance?.memberId || '');
+    setPlanType(insurance?.planType || 'PPO');
+    setDeductible(insurance?.deductible ?? 0);
+    setOopMax(insurance?.oopMax ?? 0);
+    setCopay(insurance?.copay ?? 0);
+    setCoinsurance(insurance?.coinsurance ?? 0);
+  }, [profile, insurance]);
+
   const selectedInsurerKey = useMemo(
     () => insurers.find(i => i.label === carrier)?.key ?? '',
     [carrier, insurers],
   );
-  const bcbsSelected = isBcbsInsurerKey(selectedInsurerKey);
-  const bcbsPlanPicklist = bcbsSelected && bcbsPlanOptions.length > 0;
+
+  const planChoices = useMemo(() => {
+    const key = selectedInsurerKey;
+    if (!key) return [];
+    const fromData = planOptionsByInsurer[key] ?? [];
+    if (fromData.length > 0) return fromData;
+    if (key === 'bcbs') return BCBS_PLAN_FALLBACK;
+    return GENERIC_PLAN_FALLBACK;
+  }, [selectedInsurerKey, planOptionsByInsurer]);
 
   const save = async () => {
-    const isoDob = dobDisplay ? parseUsDateToIso(dobDisplay) : undefined;
-    if (dobDisplay && !isoDob) {
-      const msg = 'Enter a valid date of birth as MM/DD/YYYY.';
-      setDobError(msg);
-      toast.error(msg);
+    const iso = parseUsDateToIso(dobDisplay);
+    if (!iso) {
+      setDobError('Enter a valid date of birth as MM/DD/YYYY.');
+      toast.error('Check date of birth');
       return;
     }
-    const nextProfile = { fullName: name, zip, phone, dob: isoDob };
-    const nextInsurance = {
+    setDobError(null);
+    const nextProfile: UserProfile = {
+      fullName: name,
+      dob: iso,
+      zip,
+      phone,
+      onboardingCompleted: profile?.onboardingCompleted,
+    };
+    const nextInsurance: InsuranceProfile = {
       carrier,
       planName,
       memberId,
@@ -98,16 +135,14 @@ const Settings = () => {
     };
     setProfile(nextProfile);
     setInsurance(nextInsurance);
-    if (isAuthenticated) {
-      try {
-        await patchUserMe({
-          user_profile: userProfileToApi(nextProfile),
-          insurance_profile: insuranceProfileToApi(nextInsurance),
-        });
-      } catch {
-        toast.error('Could not sync profile to the server');
-        return;
-      }
+    try {
+      await patchUserMe({
+        user_profile: userProfileToApi(nextProfile),
+        insurance_profile: insuranceProfileToApi(nextInsurance),
+      });
+    } catch {
+      toast.error('Could not sync profile to the server');
+      return;
     }
     toast.success('Profile updated');
   };
@@ -156,9 +191,10 @@ const Settings = () => {
 
         <section className="mb-8">
           <h2 className="text-lg font-semibold mb-4">Insurance</h2>
+          {coverageLoading && <p className="text-sm text-muted-foreground mb-2">Loading insurance options…</p>}
           <div className="space-y-3">
             <div>
-              <Label>Carrier</Label>
+              <Label>Insurance carrier</Label>
               <Select
                 value={selectedInsurerKey || undefined}
                 onValueChange={key => {
@@ -167,7 +203,7 @@ const Settings = () => {
                   setCarrier(opt.label);
                   setPlanName('');
                 }}
-                disabled={coverageOptionsLoading || insurers.length === 0}
+                disabled={coverageLoading}
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select your insurer" />
@@ -183,57 +219,71 @@ const Settings = () => {
             </div>
             <div>
               <Label>Plan name</Label>
-              {bcbsPlanPicklist ? (
-                <Select
-                  value={planName || undefined}
-                  onValueChange={v => setPlanName(v)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select a BCBS plan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bcbsPlanOptions.map(plan => (
-                      <SelectItem key={plan} value={plan}>
-                        {plan}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  value={planName}
-                  onChange={e => setPlanName(e.target.value)}
-                  className="mt-1"
-                  placeholder={selectedInsurerKey ? 'Enter your plan name' : 'Select a carrier first'}
-                />
-              )}
+              <Select
+                value={planName || undefined}
+                onValueChange={setPlanName}
+                disabled={!carrier || planChoices.length === 0 || coverageLoading}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select your plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {planChoices.map(plan => (
+                    <SelectItem key={plan} value={plan}>
+                      {plan}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div><Label>Member ID</Label><Input value={memberId} onChange={e => setMemberId(e.target.value)} className="mt-1" /></div>
+            <div>
+              <Label>Member ID</Label>
+              <Input value={memberId} onChange={e => setMemberId(e.target.value)} className="mt-1" />
+            </div>
             <div>
               <Label>Plan type</Label>
               <Select value={planType} onValueChange={v => setPlanType(v as InsuranceProfile['planType'])}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  {['PPO', 'HMO', 'EPO', 'Other'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {['PPO', 'HMO', 'EPO', 'Other'].map(t => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Deductible ($)</Label><Input type="number" value={deductible || ''} onChange={e => setDeductible(Number(e.target.value))} className="mt-1" /></div>
-              <div><Label>OOP max ($)</Label><Input type="number" value={oopMax || ''} onChange={e => setOopMax(Number(e.target.value))} className="mt-1" /></div>
+              <div>
+                <Label>Deductible ($)</Label>
+                <Input type="number" value={deductible} onChange={e => setDeductible(Number(e.target.value))} className="mt-1" />
+              </div>
+              <div>
+                <Label>OOP max ($)</Label>
+                <Input type="number" value={oopMax} onChange={e => setOopMax(Number(e.target.value))} className="mt-1" />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Copay ($)</Label><Input type="number" value={copay || ''} onChange={e => setCopay(Number(e.target.value))} className="mt-1" /></div>
-              <div><Label>Coinsurance (%)</Label><Input type="number" value={coinsurance || ''} onChange={e => setCoinsurance(Number(e.target.value))} className="mt-1" /></div>
+              <div>
+                <Label>Copay ($)</Label>
+                <Input type="number" value={copay || ''} onChange={e => setCopay(Number(e.target.value))} className="mt-1" />
+              </div>
+              <div>
+                <Label>Coinsurance (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={coinsurance}
+                  onChange={e => setCoinsurance(Number(e.target.value))}
+                  className="mt-1"
+                />
+              </div>
             </div>
           </div>
         </section>
-
-        <div className="flex gap-3">
-          <Button type="button" variant="outline" className="flex-1" onClick={() => navigate('/map')}>
-            Not now — view map
-          </Button>
-        </div>
 
         <Button className="w-full bg-primary text-primary-foreground hover:bg-primary-hover h-11" onClick={save}>
           Save changes

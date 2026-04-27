@@ -5,12 +5,12 @@ from pydantic import BaseModel, EmailStr
 
 
 class UserDB(BaseModel):
-    id: str
+    id: str | None = None
     email: EmailStr | None = None
     full_name: str | None = None
     picture: str | None = None
     is_active: bool = True
     user_profile: dict[str, Any] | None = None
     insurance_profile: dict[str, Any] | None = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

@@ -29,7 +29,7 @@ const Navbar = () => {
   return (
     <nav
       className={cn(
-        'sticky top-0 z-50 bg-card/80 backdrop-blur-md border-b border-border',
+        'sticky top-0 z-[60] bg-card/80 backdrop-blur-md border-b border-border',
         'pt-[max(0px,env(safe-area-inset-top))]',
       )}
     >
@@ -43,6 +43,9 @@ const Navbar = () => {
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-2 lg:gap-3">
+          <Link to="/">
+            <Button variant="ghost" size="sm">Home</Button>
+          </Link>
           <Link to="/why-it-matters">
             <Button variant="ghost" size="sm">Why it matters</Button>
           </Link>
@@ -56,12 +59,6 @@ const Navbar = () => {
             <>
               <Link to="/map">
                 <Button variant="ghost" size="sm">Map</Button>
-              </Link>
-              <Link to="/saved">
-                <Button variant="ghost" size="sm">Saved</Button>
-              </Link>
-              <Link to="/settings">
-                <Button variant="ghost" size="sm">My Profile</Button>
               </Link>
               <Button variant="outline" size="sm" onClick={() => { logout(); navigate('/'); }}>
                 Sign out
@@ -99,6 +96,9 @@ const Navbar = () => {
                 <SheetTitle className="text-base">Menu</SheetTitle>
               </SheetHeader>
               <div className="flex flex-col gap-1 py-2 overflow-y-auto flex-1">
+                <Link to="/" onClick={closeMobile}>
+                  <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Home</Button>
+                </Link>
                 <Link to="/why-it-matters" onClick={closeMobile}>
                   <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Why it matters</Button>
                 </Link>
@@ -112,12 +112,6 @@ const Navbar = () => {
                   <>
                     <Link to="/map" onClick={closeMobile}>
                       <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Map</Button>
-                    </Link>
-                    <Link to="/saved" onClick={closeMobile}>
-                      <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>Saved</Button>
-                    </Link>
-                    <Link to="/settings" onClick={closeMobile}>
-                      <Button variant="ghost" className={cn(sheetBtnClass, navLinkClass)}>My Profile</Button>
                     </Link>
                     <Button
                       variant="outline"

@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, EmailStr
-from datetime import datetime
 
 # --- Intake ---
 
@@ -139,12 +138,12 @@ class ProvidersQuery(BaseModel):
     specialty: str | None = None
 
 
-# --- Users (JWT + PostgreSQL profiles) ---
+# --- Auth ---
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=256)
+    password: str = Field(min_length=6)
 
 
 class LoginRequest(BaseModel):
@@ -154,9 +153,11 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str = "bearer"
     sub: str
-    email: EmailStr | None = None
+    email: str | None = None
+
+
+# --- Users ---
 
 
 class UserMeResponse(BaseModel):

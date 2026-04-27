@@ -37,6 +37,28 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+// --- Auth (JWT) ---
+
+export type TokenResponseApi = {
+  access_token: string;
+  sub: string;
+  email: string | null;
+};
+
+export async function apiRegister(email: string, password: string): Promise<TokenResponseApi> {
+  return json<TokenResponseApi>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function apiLogin(email: string, password: string): Promise<TokenResponseApi> {
+  return json<TokenResponseApi>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
 export type UserMeApi = {
   sub: string;
   email: string | null;
@@ -45,12 +67,14 @@ export type UserMeApi = {
 };
 
 export function userProfileToApi(p: UserProfile): Record<string, unknown> {
-  return {
+  const o: Record<string, unknown> = {
     fullName: p.fullName,
     dob: p.dob,
     zip: p.zip,
     phone: p.phone,
   };
+  if (p.onboardingCompleted != null) o.onboarding_completed = p.onboardingCompleted;
+  return o;
 }
 
 export function insuranceProfileToApi(p: InsuranceProfile): Record<string, unknown> {
@@ -73,6 +97,8 @@ export function userProfileFromApi(raw: Record<string, unknown> | null | undefin
     dob: raw.dob ? String(raw.dob) : undefined,
     zip: String(raw.zip ?? ''),
     phone: raw.phone ? String(raw.phone) : undefined,
+    onboardingCompleted:
+      typeof raw.onboarding_completed === 'boolean' ? raw.onboarding_completed : undefined,
   };
 }
 
@@ -184,11 +210,79 @@ export type HospitalApi = {
   discounted_cash: number | null;
   cpt: string;
   cpt_desc: string;
+  // Provenance fields
+  billing_class?: string;
+  setting?: string;
+  rate_methodology?: string;
+  bcbs_tic_rate?: number | null;
+  bcbs_tic_billing_class?: string;
+  bcbs_source?: string;
+  bcbs_plan?: string;
+  hp_plan_name?: string;
+  hp_source?: string;
+  aetna_source?: string;
+  uhc_source?: string;
+  turquoise_bundled_price?: number | null;
+  turquoise_quality_rating?: number | null;
+  masscomparecare_total_paid?: number | null;
+  fh_physician_in_network?: number | null;
+  fh_anesthesia_in_network?: number | null;
+  fh_facility_hosp_in_network?: number | null;
+  fh_pathology_in_network?: number | null;
 };
 
-export async function fetchHospitals(cpt?: string): Promise<HospitalApi[]> {
-  const q = cpt ? `?cpt=${cpt}` : '';
-  return json<HospitalApi[]>(`/api/hospitals${q}`);
+export async function fetchHospitals(cpt?: string, specialty?: string): Promise<HospitalApi[]> {
+  const q = new URLSearchParams();
+  if (cpt) q.set('cpt', cpt);
+  if (specialty) q.set('specialty', specialty);
+  const qs = q.toString();
+  return json<HospitalApi[]>(`/api/hospitals${qs ? `?${qs}` : ''}`);
+}
+
+export type PaymentRow = {
+  key: string;
+  plan_id: string;
+  plan_name: string;
+  payer: string;
+  hospital_id: string;
+  hospital_name: string;
+  scenario_id: string;
+  cpt: string;
+  cpt_desc: string;
+  specialty: string;
+  negotiated_rate_cents: number | null;
+  rule_type: string;
+  scenario_a_cents: number | null;
+  scenario_b_cents: number | null;
+  rule_summary: string;
+  note: string;
+  plan_deductible_cents: number;
+  plan_coinsurance_pct: number;
+  plan_copay_specialist_cents: number;
+  plan_oop_max_cents: number;
+  fh_physician_in_network: number | null;
+  fh_anesthesia_in_network: number | null;
+  fh_facility_hosp_in_network: number | null;
+  fh_pathology_in_network: number | null;
+  data_completeness: 'full' | 'benchmark_only' | 'no_data';
+  billing_class: string;
+};
+
+export async function fetchPaymentTable(params?: {
+  plan_id?: string;
+  cpt?: string;
+  hospital_id?: string;
+  scenario_id?: string;
+  specialty?: string;
+}): Promise<PaymentRow[]> {
+  const q = new URLSearchParams();
+  if (params?.plan_id) q.set('plan_id', params.plan_id);
+  if (params?.cpt) q.set('cpt', params.cpt);
+  if (params?.hospital_id) q.set('hospital_id', params.hospital_id);
+  if (params?.scenario_id) q.set('scenario_id', params.scenario_id);
+  if (params?.specialty) q.set('specialty', params.specialty);
+  const qs = q.toString();
+  return json<PaymentRow[]>(`/api/hospitals/payment-table${qs ? `?${qs}` : ''}`);
 }
 
 export type InsurerOptionApi = {
@@ -200,6 +294,8 @@ export type InsurerOptionApi = {
 export type InsuranceOptionsApi = {
   insurers: InsurerOptionApi[];
   bcbs_plan_options: string[];
+  /** Distinct plan strings per insurer key (from Mongo hospital_rates). May be empty for payers without plan columns. */
+  plan_options_by_insurer: Record<string, string[]>;
 };
 
 export async function fetchInsuranceOptions(): Promise<InsuranceOptionsApi> {

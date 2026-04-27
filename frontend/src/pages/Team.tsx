@@ -31,14 +31,6 @@ const TEAM = [
     origin: 'Germany',
     bio: `I am from Germany and studied at Yale SOM. My years in consulting taught me how to pressure-test ideas against reality. I am here to make sure our product solves real problems, not slide-deck problems, and that it reaches the people who need it most. Strategy only counts if it shows up where patients live.`,
   },
-  {
-    photo: '/team/Isaac-manly.png',
-    initials: 'IM',
-    name: 'Isaac Manly',
-    school: 'MIT',
-    origin: 'United States',
-    bio: `I am based in the United States and study at MIT. I am a full-stack developer, and I have spent years shipping software that has to work under pressure. I am putting that experience into building a product that is fast, dependable, and worthy of the trust people place in it when they are making healthcare decisions.`,
-  },
 ] as const;
 
 function TeamMemberCard({
@@ -85,18 +77,20 @@ const Team = () => (
       <section className="container mx-auto px-4 py-10 sm:py-12 md:py-16 max-w-5xl pb-[max(2rem,env(safe-area-inset-bottom))]">
         <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-3 text-center">Team</p>
         <h1 className="text-2xl md:text-3xl font-bold text-center mb-8 max-w-3xl mx-auto leading-tight">
-          Four continents, one mission
+          Three continents, one mission
         </h1>
         <p className="text-center text-muted-foreground leading-relaxed max-w-2xl mx-auto mb-14 md:mb-16">
-          We bring together medicine, product, strategy, and engineering: clinical insight, consulting rigor, product
-          judgment, and full-stack craft. From Morocco, China, Germany, and the United States, we are combining what we
+          We bring together medicine, product, and strategy: clinical insight, product
+          judgment, and consulting rigor. From Morocco, China, and Germany, we are combining what we
           have learned across healthcare and technology because we believe transparent, personalized cost information can
           change who gets care and who gets blindsided. This project is our bet on that impact.
         </p>
 
         <div className="grid gap-10 md:gap-12 md:grid-cols-2">
-          {TEAM.map(m => (
-            <TeamMemberCard key={m.name} {...m} />
+          {TEAM.map((m, i) => (
+            <div key={m.name} className={i === TEAM.length - 1 ? 'md:col-span-2 md:max-w-md md:mx-auto' : ''}>
+              <TeamMemberCard {...m} />
+            </div>
           ))}
         </div>
       </section>

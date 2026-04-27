@@ -54,7 +54,6 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def reset_engine() -> None:
-    """Clear singleton for tests."""
     global _engine, _session_factory
     if _engine is not None:
         _engine.dispose()

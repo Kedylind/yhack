@@ -7,6 +7,8 @@
 import type { SpecialtyPlugin } from '@/lib/specialties/types';
 import { buildGastroProcedureIntake, isGastroProcedureComplete } from '@/lib/specialties/gastro/intake';
 import { GastroProcedureStep } from '@/lib/specialties/gastro/GastroProcedureStep';
+import { buildDermProcedureIntake, isDermProcedureComplete } from '@/lib/specialties/derm/intake';
+import { DermProcedureStep } from '@/lib/specialties/derm/DermProcedureStep';
 
 export const SPECIALTY_PLUGINS: readonly SpecialtyPlugin[] = [
   {
@@ -21,6 +23,18 @@ export const SPECIALTY_PLUGINS: readonly SpecialtyPlugin[] = [
     buildProcedureIntake: buildGastroProcedureIntake,
     ProcedureStep: GastroProcedureStep,
   },
+  {
+    id: 'Dermatology',
+    label: 'Dermatology',
+    procedureStep: {
+      title: 'Find your procedure',
+      description:
+        'Answer a few questions about your skin concern. We map your answers to a CPT code for hospital price comparison.',
+    },
+    isProcedureComplete: isDermProcedureComplete,
+    buildProcedureIntake: buildDermProcedureIntake,
+    ProcedureStep: DermProcedureStep,
+  },
 ];
 
 /** All rows shown in the specialty dropdown; `available: false` means disabled (coming soon). */
@@ -32,7 +46,7 @@ export type SpecialtySelectOption = {
 
 export const SPECIALTY_SELECT_OPTIONS: readonly SpecialtySelectOption[] = [
   { id: 'Gastroenterology', label: 'Gastroenterology', available: true },
-  { id: 'Dermatology', label: 'Dermatology (coming soon)', available: false },
+  { id: 'Dermatology', label: 'Dermatology', available: true },
 ];
 
 export const DEFAULT_SPECIALTY_ID = SPECIALTY_PLUGINS[0].id;

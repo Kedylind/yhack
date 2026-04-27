@@ -10,7 +10,7 @@ const Footer = () => (
         <p className="inline-flex items-center gap-1.5 text-center sm:text-right max-w-[20rem] sm:max-w-xs leading-snug">
           <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
           <span>
-            Passwords are hashed on the server; we never store them in plain text.
+            Your account is secured with encrypted credentials. We never store your password in plain text.
           </span>
         </p>
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">

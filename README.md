@@ -229,6 +229,37 @@ If you still see **`Path doesn't exist: alembic`**, the API image is an **old bu
 - Railway gives you **one** Postgres **server** and typically **one database** (often named `railway`). Signing up on the site does **not** create a new database per user.
 - Each registered user is a **row** in the **`users`** table (`backend/app/db/tables.py`). The **password is not stored in plain text**; only a **bcrypt hash** is stored in **`password_hash`**. After login, the browser holds a **JWT** (signed with **`JWT_SECRET_KEY`**); that token is not stored as a row in Postgres by default.
 
+## Transparent Pricing Branch Setup (`feat/yhack-transparent-pricing`)
+
+This branch has a completely reworked pricing engine with multi-source hospital rates, provider transparency, and OOP estimation. It uses a **separate database** (`boston_gi_transparent`) to avoid interfering with the stable `david-dev` Railway deployment.
+
+### Quick start
+
+```bash
+git checkout feat/yhack-transparent-pricing
+cp backend/.env.example backend/.env
+# Edit backend/.env — fill in the MongoDB password (ask in team chat)
+
+cd backend
+pip install -r requirements.txt
+cd ..
+python scripts/import_csv_to_mongo.py --az-mvp
+
+cd backend
+uvicorn app.main:app --reload
+# Health check: http://127.0.0.1:8000/api/health
+```
+
+### What's different from `david-dev`?
+
+- Database: `boston_gi_transparent` (not `boston_gi_demo`)
+- 6 collections: providers, procedures, prices, insurers, hospital_rates, users
+- 28-column hospital_rates with multi-payer negotiated rates
+- New API routes: `/api/hospitals`, `/api/payment-table`
+- Data seeded from `data/az-data/` CSVs (committed in git)
+
+> **Do NOT** change `MONGODB_DB_NAME` back to `boston_gi_demo` — that would overwrite the stable production data.
+
 ## Disclaimer
 
 Demo only — always **call your plan** to verify network status and cost.

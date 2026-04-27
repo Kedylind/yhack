@@ -108,14 +108,34 @@ class HospitalRate(Base):
     discounted_cash: Mapped[float | None] = mapped_column(Float, nullable=True)
     de_identified_min: Mapped[float | None] = mapped_column(Float, nullable=True)
     de_identified_max: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Per-payer negotiated rates
     bcbs_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     bcbs_source: Mapped[str] = mapped_column(Text, nullable=False, default="")
     bcbs_plan: Mapped[str] = mapped_column(Text, nullable=False, default="")
     aetna_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     aetna_source: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    aetna_plan: Mapped[str] = mapped_column(Text, nullable=False, default="")
     harvard_pilgrim_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hp_plan_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    hp_source: Mapped[str] = mapped_column(Text, nullable=False, default="")
     uhc_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    uhc_source: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Cross-validation: TiC insurer-side
     bcbs_tic_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bcbs_tic_billing_class: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Integrity metadata
+    billing_class: Mapped[str] = mapped_column(Text, nullable=False, default="unknown")
+    setting: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    rate_methodology: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Benchmarks
+    turquoise_bundled_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    turquoise_quality_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
+    masscomparecare_total_paid: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # FAIR Health component breakdown
+    fh_physician_in_network: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fh_anesthesia_in_network: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fh_facility_hosp_in_network: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fh_pathology_in_network: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(Text, nullable=False)
 
 

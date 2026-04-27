@@ -42,6 +42,8 @@ export interface UserProfile {
   dob?: string;
   zip: string;
   phone?: string;
+  /** Set after full onboarding wizard. */
+  onboardingCompleted?: boolean;
 }
 
 export interface InsuranceProfile {

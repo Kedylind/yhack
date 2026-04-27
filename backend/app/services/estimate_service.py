@@ -1,20 +1,19 @@
-"""Assemble estimate responses from PostgreSQL price + provider data."""
+"""Assemble estimate responses from Postgres price + provider data."""
 
 from __future__ import annotations
 
 from collections import defaultdict
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.tables import Price, Provider
 from app.models.api import (
     AllowedAmountRange,
     EstimateResponse,
+    OopRange,
     ProviderEstimate,
     ProvenanceItem,
-    OopRange,
 )
 from app.services.intake import missing_required_fields, normalize_intake
 from app.services.oop import compute_oop_range_cents, deductible_remaining_unknown_from_intake
@@ -37,12 +36,12 @@ def _provider_to_api_dict(p: Provider) -> dict[str, Any]:
         "lat": p.lat,
         "lng": p.lng,
         "phone": p.phone,
-        "specialties": list(p.specialties or []),
+        "specialties": list(p.specialties),
         "source": p.source,
     }
 
 
-def _price_row_dict(p: Price) -> dict[str, Any]:
+def _price_to_dict(p: Price) -> dict[str, Any]:
     return {
         "provider_id": p.provider_id,
         "bundle_id": p.bundle_id,
@@ -52,12 +51,11 @@ def _price_row_dict(p: Price) -> dict[str, Any]:
         "source": p.source,
         "confidence": p.confidence,
         "effective_date": p.effective_date,
-        "mvp_hospital_id": p.mvp_hospital_id,
     }
 
 
 def build_estimate_response(
-    session: Session,
+    db: Session,
     intake_raw: dict[str, Any],
     confirmed: dict[str, Any] | None,
     explicit_bundle_id: str | None,
@@ -68,11 +66,8 @@ def build_estimate_response(
     scenario_id = explicit_scenario_id or infer_scenario_id(intake, confirmed)
     bundle_id = explicit_bundle_id or scenario_to_bundle_id(scenario_id)
 
-    provider_rows = list(
-        session.scalars(
-            select(Provider).where(Provider.specialties.contains(["Gastroenterology"]))
-        ).all()
-    )
+    specialty = merged.get("specialty") or merged.get("care_focus") or "Gastroenterology"
+    provider_rows = db.query(Provider).filter(Provider.specialties.contains([specialty])).all()
 
     providers_out = [_provider_to_api_dict(p) for p in provider_rows]
     estimates: list[ProviderEstimate] = []
@@ -85,9 +80,7 @@ def build_estimate_response(
 
     wanted_payer = insurance_carrier_to_payer(merged.get("insurance_carrier"))
 
-    def _oop_tuple(
-        amin: int, amax: int
-    ) -> tuple[int, int, list[str]]:
+    def _oop_tuple(amin: int, amax: int) -> tuple[int, int, list[str]]:
         o_min, o_max, oop_asm = compute_oop_range_cents(
             amin,
             amax,
@@ -100,19 +93,17 @@ def build_estimate_response(
         return o_min, o_max, list(oop_asm)
 
     all_npis = [p.npi for p in provider_rows]
-    batch_price_rows: list[Price] = []
-    if all_npis:
-        batch_price_rows = list(
-            session.scalars(
-                select(Price).where(
-                    Price.provider_id.in_(all_npis),
-                    Price.bundle_id == bundle_id,
-                )
-            ).all()
+    batch_prices = (
+        db.query(Price)
+        .filter(
+            Price.provider_id.in_(all_npis),
+            Price.bundle_id == bundle_id,
         )
+        .all()
+    )
     prices_by_npi: dict[str, list[dict[str, Any]]] = {}
-    for pd in batch_price_rows:
-        prices_by_npi.setdefault(pd.provider_id, []).append(_price_row_dict(pd))
+    for pr in batch_prices:
+        prices_by_npi.setdefault(pr.provider_id, []).append(_price_to_dict(pr))
 
     for p in provider_rows:
         npi = p.npi
